@@ -5,13 +5,15 @@
 cliVersion: 4.10.1
 domain: example.com
 layout:
-  - go.kubebuilder.io/v4
+- go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v1-alpha: {}
 projectName: gatewayapi-operator
 repo: github.com/NorskHelsenett/gatewayapi-operator
 resources:
-  - controller: true
-    domain: example.com
-    group: gateway
-    kind: HTTPRoute
-    version: v1
+- controller: true
+  domain: example.com
+  group: gateway
+  kind: HTTPRoute
+  version: v1
 version: "3"
