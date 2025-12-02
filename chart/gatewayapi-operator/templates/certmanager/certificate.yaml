@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: selfsigned-issuer
-    namespace: {{ .Values.namespace |  .Release.Namespace }}
+    namespace: {{ .Values.namespace }}
 spec:
   selfSigned: {}
 {{- if .Values.metrics.enable }}
@@ -22,7 +22,7 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: metrics-certs
-    namespace: {{ .Values.namespace |  .Release.Namespace }}
+    namespace: {{ .Values.namespace }}
 spec:
   dnsNames:
     - gatewayapi-operator.{{ .Release.Namespace }}.svc

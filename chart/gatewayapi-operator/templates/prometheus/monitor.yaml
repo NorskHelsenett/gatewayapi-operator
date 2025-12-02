@@ -7,7 +7,7 @@ metadata:
     {{- include "chart.labels" . | nindent 4 }}
     control-plane: controller-manager
   name: gatewayapi-operator-controller-manager-metrics-monitor
-    namespace: {{ .Values.namespace |  .Release.Namespace }}
+    namespace: {{ .Values.namespace }}
 spec:
   endpoints:
     - path: /metrics
