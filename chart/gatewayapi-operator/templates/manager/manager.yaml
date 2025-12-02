@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gatewayapi-operator-controller-manager
-    namespace: {{ .Values.namespace |  .Release.Namespace }}
+  namespace: {{ .Values.namespace }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
     control-plane: controller-manager

@@ -8,7 +8,7 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: allow-metrics-traffic
-    namespace: {{ .Values.namespace |  .Release.Namespace }}
+    namespace: {{ .Values.namespace }}
 spec:
   podSelector:
     matchLabels:

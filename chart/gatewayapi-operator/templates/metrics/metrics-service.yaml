@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: gatewayapi-operator-controller-manager-metrics-service
-    namespace: {{ .Values.namespace |  .Release.Namespace }}
+  namespace: {{ .Values.namespace }}
   labels:
     {{- include "chart.labels" . | nindent 4 }}
     control-plane: controller-manager
