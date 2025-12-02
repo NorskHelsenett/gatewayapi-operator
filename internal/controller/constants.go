@@ -2,14 +2,14 @@ package controller
 
 const (
 	// httprouteFinalizerName is the finalizer added to HTTPRoutes
-	httprouteFinalizerName = "gatewayapi-operator/finalizer"
+	httprouteFinalizerName = "gatewayapi-operator.vitistack.io/finalizer"
 
 	// reconcileAnnotationKey marks HTTPRoute resources that have been reconciled
-	reconcileAnnotationKey = "gatewayapi-operator/reconciled"
+	reconcileAnnotationKey = "gatewayapi-operator.vitistack.io/reconciled"
 
 	// previousGatewayAnnotationKey tracks the previous gateway reference
 	// TODO: find a better way to implement this:
-	previousGatewayAnnotationKey = "gatewayapi-operator/previous-gateway"
+	previousGatewayAnnotationKey = "gatewayapi-operator.vitistack.io/previous-gateway"
 
 	// clusterIssuerAnnotation specifies the cert-manager cluster issuer
 	clusterIssuerAnnotation = "cert-manager.io/cluster-issuer"

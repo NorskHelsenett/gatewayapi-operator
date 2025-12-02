@@ -8,7 +8,7 @@ Automatically manages Gateway resources based on HTTPRoute configurations.
 - Automatic TLS certificate integration with cert-manager
 
 ## How It Works
-1. HTTPRoutes with `gatewayapi-operator/enabled: "true"` annotation are watched
+1. HTTPRoutes with `gatewayapi-operator.vitistack.io/enabled: "true"` annotation are watched
 2. Gateway is created/updated with HTTPS listeners for each hostname in the HTTPRoute
 3. Listeners reference TLS certificates in format: `{hostname}-tls`
 4. Gateway is deleted when no HTTPRoutes reference it anymore
@@ -51,7 +51,7 @@ argocd      hnet-private-argo   eg                False        3s
 ## Configuration
 
 ### HTTPRoute Annotations
-- `gatewayapi-operator/enabled: "true"` - Required to enable operator management
-- `gatewayapi-operator/cluster-issuer` - cert-manager cluster issuer (default: `internpki`)
+- `gatewayapi-operator.vitistack.io/enabled: "true"` - Required to enable operator management
+- `gatewayapi-operator.vitistack.io/cluster-issuer` - cert-manager cluster issuer (default: `internpki`)
 - `ipam.vitistack.io/zone` - IPAM zone for gateway (default: `hnet-private`)
 
