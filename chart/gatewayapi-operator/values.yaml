@@ -1,5 +1,5 @@
 # [NAMESPACE]: Namespace where the operator will be deployed
-namespace: gatewayapi-operator
+namespace: gatewayapi-operator-system
 
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
