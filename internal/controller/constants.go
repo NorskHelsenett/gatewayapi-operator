@@ -20,9 +20,6 @@ const (
 	// gatewayClassName is the Gateway API gateway class name
 	gatewayClassName = "eg"
 
-	// httpPort is the default HTTP port
-	httpPort = 80
-
 	// httpsPort is the default HTTPS port
 	httpsPort = 443
 
