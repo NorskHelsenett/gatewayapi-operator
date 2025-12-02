@@ -55,3 +55,15 @@ argocd      hnet-private-argo   eg                False        3s
 - `gatewayapi-operator.vitistack.io/cluster-issuer` - cert-manager cluster issuer (default: `internpki`)
 - `ipam.vitistack.io/zone` - IPAM zone for gateway (default: `hnet-private`)
 
+
+## Be aware
+1. Multiple httproutes with differemt cluster-issuer annotation referencing the same gateway is not possible. Create a new gateway per cluster-issuer
+2. Multiple httproutes with different ipam.vitistack.io/zone annotation is not possible. Create a new gateway per IPAM zone.
+3. Redirect and BackendTLSPolicy must be configured manually. It is not supported yet.
+
+
+### Configuring redirect:
+https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/
+
+### Configuring BackendTLSPolicy
+https://gateway.envoyproxy.io/docs/api/gateway_api/backendtlspolicy/
