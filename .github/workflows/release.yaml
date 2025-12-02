@@ -73,3 +73,33 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  publish-helm:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    needs:
+      - create-oci-image
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.16.4
+
+      - name: install-yq
+        run: |
+          wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY}.tar.gz -O - | tar xz && mv ${BINARY} yq && chmod +x yq
+        env:
+          VERSION: v4.44.5
+          BINARY: yq_linux_amd64
+
+      - name: Build helm chart
+        run: |
+          export HELM_VERSION=${VERSION#v*}
+          ./yq e -i '.version = strenv(HELM_VERSION),.appVersion = strenv(VERSION)' chart/gatewayapi-operator/Chart.yaml
+          ./yq e -i '.controllerManager.container.image.tag = strenv(HELM_VERSION),.controllerManager.container.image.repository = "ghcr.io/norskhelsenett/gatewayapi-operator"' chart/gatewayapi-operator/values.yaml
+          helm package chart/gatewayapi-operator
+          echo  ${{ secrets.GITHUB_TOKEN }} | helm registry login -u ${{ github.actor }} ghcr.io --password-stdin
+          helm push gatewayapi-operator-${HELM_VERSION}.tgz oci://ghcr.io/norskhelsenett/helm/
+        env:
+          VERSION: ${{ github.ref_name }}
