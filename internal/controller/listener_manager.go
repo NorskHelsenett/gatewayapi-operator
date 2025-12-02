@@ -172,29 +172,3 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
 	return nil
 }
-
-// listenersEqual checks if two listener slices are equivalent
-func listenersEqual(a, b []gatewayv1.Listener) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	// Create a map of hostnames from slice a
-	aHostnames := make(map[string]bool)
-	for _, listener := range a {
-		if listener.Hostname != nil {
-			aHostnames[string(*listener.Hostname)] = true
-		}
-	}
-
-	// Check if all hostnames from b exist in a
-	for _, listener := range b {
-		if listener.Hostname != nil {
-			if !aHostnames[string(*listener.Hostname)] {
-				return false
-			}
-		}
-	}
-
-	return true
-}
