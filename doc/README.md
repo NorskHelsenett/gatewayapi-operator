@@ -17,7 +17,7 @@ metadata:
   name: <navn>
   namespace: <namespace>
   annotations:
-    httproute-operator/enabled: "true"
+    gatewayapi-operator.vitistack.io/enabled: "true"
 spec:
   parentRefs:
     - name: <navn du ønsker på Gateway>
@@ -66,10 +66,10 @@ gatewayapi-operator.vitistack.io/enabled: "true"
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: web01
+  name: <name>
   namespace: <namespace>
   annotations:
-    httproute-operator/enabled: "true"
+    gatewayapi-operator.vitistack.io/enabled: "true"
     gatewayapi-operator.vitistack.io/cluster-issuer: "letsencrypt-staging"
 spec:
   parentRefs:
