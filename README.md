@@ -55,6 +55,33 @@ argocd      hnet-private-argo   eg                False        3s
 - `gatewayapi-operator.vitistack.io/cluster-issuer` - cert-manager cluster issuer (default: `internpki`)
 - `ipam.vitistack.io/zone` - IPAM zone for gateway (default: `hnet-private`)
 
+### Argocd Project:
+```
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gatewayapi-operator
+  namespace: argocd
+spec:
+  project: nhn-tooling
+  source:
+    repoURL: ncr.sky.nhn.no/ghcr/norskhelsenett/helm
+    targetRevision: 0.*
+    helm:
+      valueFiles:
+        - values.yaml
+    chart: gatewayapi-operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gatewayapi-operator-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+````
+
 
 ## Be aware
 1. Multiple httproutes with differemt cluster-issuer annotation referencing the same gateway is not possible. Create a new gateway per cluster-issuer
@@ -67,6 +94,7 @@ https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/
 
 ### Configuring BackendTLSPolicy
 https://gateway.envoyproxy.io/docs/api/gateway_api/backendtlspolicy/
+
 
 
 # License
