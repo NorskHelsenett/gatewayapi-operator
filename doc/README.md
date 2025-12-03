@@ -61,6 +61,35 @@ Dersom du ikke ønsker å benytte gatewayapi-operatoren for automatisk konfigura
 gatewayapi-operator.vitistack.io/enabled: "true"
 ``` 
 
+### Eksempel med letsencrypt-staging
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web01
+  namespace: <namespace>
+  annotations:
+    httproute-operator/enabled: "true"
+    gatewayapi-operator.vitistack.io/cluster-issuer: "letsencrypt-staging"
+spec:
+  parentRefs:
+    - name: <navn du ønsker på Gateway>
+      sectionName: <fqdn>
+      namespace: <namespace du ønsker på Gateway>
+  hostnames:
+    - <fqdn>
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: <service navn>
+          port: <port>
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+```
 
 ### Kjente gotchas
 1. **Flere httproutes med forskjellige cluster-issuer annoteringer som peker på samme gateway er ikke mulig. Lag en ny gateway per cluster-issuer.**
