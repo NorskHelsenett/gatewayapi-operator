@@ -174,7 +174,7 @@ func main() {
 		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(nil, "unable to start manager", "error", err.Error())
 		os.Exit(1)
 	}
 
