@@ -1,6 +1,6 @@
 module github.com/NorskHelsenett/gatewayapi-operator
 
-go 1.25.4
+go 1.25.5
 
 require (
 	k8s.io/apimachinery v0.34.1
