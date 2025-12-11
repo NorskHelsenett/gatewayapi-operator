@@ -102,7 +102,7 @@ spec:
 
 
 #### Konfigurering av redirect:
-https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/
+https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/ <br>
 (Gatewayapi-Operatoren oppretter ikke automatisk en redirect listener på Gatewayen, men dette er planlagt i en fremtidig release)
 
 #### TLS mot backend - Konfigurering av BackendTLSPolicy
