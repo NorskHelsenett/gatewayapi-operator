@@ -38,6 +38,9 @@ spec:
             value: /
 ```
 
+### Gateway organisering
+Det anbefales å benytte samme gateway på tvers av HTTPRoutene i clusteret. Dette sparer allokering av IP-adresser
+
 ### Utsteder av ACME sertifikat
 Denne publiseringen vil få "internpki" som cluster-issuer satt da det er default. Ønsker man å benytte en annen cluster-issuer kan man benytte følgende annotering på HTTPRoute:
 ```yaml
@@ -97,9 +100,11 @@ spec:
 3. **Redirect og BackendTLSPolicy må konfigureres manuelt. Det er ikke implementert i GatewayAPI-Operatoren enda.**
 
 
+
 #### Konfigurering av redirect:
 https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/
+(Gatewayapi-Operatoren oppretter ikke automatisk en redirect listener på Gatewayen, men dette er planlagt i en fremtidig release)
 
-#### Konfigurering av BackendTLSPolicy
+#### TLS mot backend - Konfigurering av BackendTLSPolicy
 https://gateway.envoyproxy.io/docs/api/gateway_api/backendtlspolicy/
 
