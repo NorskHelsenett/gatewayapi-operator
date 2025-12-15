@@ -94,7 +94,7 @@ spec:
             value: /
 ```
 
-### Kjente gotchas
+### Kjente feil
 1. **Flere httproutes med forskjellige cluster-issuer annoteringer som peker på samme gateway er ikke mulig. Lag en ny gateway per cluster-issuer.**
 2. **Flere httproutes med forskjellige ipam.vitistack.io/zone annoteringer er ikke mulig. Lag en ny gateway per IPAM zone.**
 3. **Redirect og BackendTLSPolicy må konfigureres manuelt. Det er ikke implementert i GatewayAPI-Operatoren enda.**
