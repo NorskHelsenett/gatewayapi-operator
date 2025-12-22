@@ -94,6 +94,12 @@ spec:
             value: /
 ```
 
+
+### Finne IP-adresse på HTTPRoute
+```
+kubectl get gateways -n <namespace du valgte på parentRefs over>
+```
+
 ### Kjente feil
 1. **Flere httproutes med forskjellige cluster-issuer annoteringer som peker på samme gateway er ikke mulig. Lag en ny gateway per cluster-issuer.**
 2. **Flere httproutes med forskjellige ipam.vitistack.io/zone annoteringer er ikke mulig. Lag en ny gateway per IPAM zone.**
