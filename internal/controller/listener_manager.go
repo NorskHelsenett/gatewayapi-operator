@@ -3,7 +3,8 @@ package controller
 import (
 	"context"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -34,7 +35,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	for _, route := range httpRouteList.Items {
 		// Skip routes being deleted or not enabled for the operator
 		if !route.DeletionTimestamp.IsZero() {
-			log.V(1).Info("Skipping route being deleted", "route", route.Name, "namespace", route.Namespace)
+			log.Info("Skipping route being deleted", "route", route.Name, "namespace", route.Namespace)
 			skippedCount++
 			continue
 		}
@@ -56,7 +57,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 				// Collect all hostnames from this route
 				for _, hostname := range route.Spec.Hostnames {
 					hostnameSet[string(hostname)] = true
-					log.V(1).Info("Collected hostname", "hostname", hostname, "route", route.Name, "gateway", gatewayName)
+					log.Info("Collected hostname", "hostname", hostname, "route", route.Name, "gateway", gatewayName)
 				}
 				break
 			}
@@ -64,11 +65,20 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	}
 
 	// Create HTTPS listeners for all collected hostnames
+	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet))
+	// listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)*2)
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet))
+
 	for hostname := range hostnameSet {
-		listener := r.createHTTPSListener(hostname, gatewayNamespace)
-		listeners = append(listeners, listener)
+		httpsListener := r.createHTTPSListener(hostname, gatewayNamespace)
+		log.Info("Created HTTPS listener", "name", httpsListener.Name, "hostname", hostname)
+		listeners = append(listeners, httpsListener)
+		// httpListener := r.createHTTPListener(hostname)
+		// log.Info("Created HTTP listener", "name", httpListener.Name, "hostname", hostname)
+		// listeners = append(listeners, httpListener)
 	}
+
+	// TODO: maybe (?) call create redirect httproute function here
 
 	log.Info("Collected listeners for Gateway",
 		"gateway", gatewayName,
@@ -121,6 +131,27 @@ func (r *HTTPRouteReconciler) createHTTPSListener(
 	}
 }
 
+// func (r *HTTPRouteReconciler) createHTTPListener(
+// 	hostname string,
+// ) gatewayv1.Listener {
+// 	// Use hostname as the listener section name
+// 	listenerName := gatewayv1.SectionName(hostname) + "-http"
+// 	hn := gatewayv1.Hostname(hostname)
+// 	fromAll := gatewayv1.NamespacesFromAll
+
+// 	return gatewayv1.Listener{
+// 		Name:     listenerName,
+// 		Protocol: gatewayv1.HTTPProtocolType,
+// 		Port:     httpPort,
+// 		Hostname: &hn,
+// 		AllowedRoutes: &gatewayv1.AllowedRoutes{
+// 			Namespaces: &gatewayv1.RouteNamespaces{
+// 				From: &fromAll,
+// 			},
+// 		},
+// 	}
+// }
+
 // updateGatewayListeners updates the gateway's listeners based on all HTTPRoutes referencing it
 func (r *HTTPRouteReconciler) updateGatewayListeners(
 	ctx context.Context,
@@ -147,28 +178,39 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		return nil
 	}
 
-	// Use Server-Side Apply to update listeners
-	// Include gatewayClassName since it's a required field, but we take it from the existing gateway
-	patch := &gatewayv1.Gateway{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1",
-			Kind:       "Gateway",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      gatewayName,
-			Namespace: gatewayNamespace,
-		},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: gateway.Spec.GatewayClassName,
-			Listeners:        newListeners,
-		},
+	log.Info("Applying Gateway patch", "listeners", len(newListeners))
+	namespacedName := &types.NamespacedName{
+		Namespace: gatewayNamespace,
+		Name:      gatewayName,
 	}
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fetch latest version
+		var latest gatewayv1.Gateway
+		if err := r.Get(ctx, *namespacedName, &latest); err != nil {
+			// If the object is already gone, nothing to do
+			if client.IgnoreNotFound(err) == nil {
+				return nil
+			}
+			return err
+		}
+		// Update the listeners array before updating the object
+		latest.Spec.Listeners = newListeners
 
-	err = r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator"))
+		return r.Update(ctx, &latest)
+	})
+
 	if err != nil {
-		return err
+		// Ignore not found errors - the object might have been deleted by another reconciliation
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "Failed to remove finalizer")
+			return err
+		} else {
+			log.Info("Gateway already deleted", "name", gateway.Name)
+			return nil
+		}
+	} else {
+		log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
+		return nil
 	}
 
-	log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
-	return nil
 }
