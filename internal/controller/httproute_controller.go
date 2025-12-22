@@ -87,7 +87,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 				// Check if finalizer is still present (might have been removed by another reconciliation)
 				if !controllerutil.ContainsFinalizer(&latest, httprouteFinalizerName) {
-					log.V(1).Info("Finalizer already removed", "name", httpRoute.Name)
+					log.Info("Finalizer already removed", "name", httpRoute.Name)
 					return nil
 				}
 
@@ -102,7 +102,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					log.Error(err, "Failed to remove finalizer")
 					return ctrl.Result{}, err
 				}
-				log.V(1).Info("HTTPRoute already deleted", "name", httpRoute.Name)
+				log.Info("HTTPRoute already deleted", "name", httpRoute.Name)
 			} else {
 				log.Info("Removed finalizer from HTTPRoute", "name", httpRoute.Name)
 			}
@@ -179,7 +179,8 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				Annotations: httpRoute.Annotations,
 			},
 		}
-		if err := r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator")); err != nil {
+		err := r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator"))
+		if err != nil {
 			log.Error(err, "Failed to update HTTPRoute annotations")
 			return ctrl.Result{}, err
 		}
