@@ -53,7 +53,7 @@ Det er kun en cluster-issuer per gateway, så ønsker man en annen utsteder må 
 Gatewayen blir opprettet med en helsenett privat adresse. Dette kan endres på ved å benytte følgende annotering:
 ```yaml
 ipam.vitistack.io/zone: hnet-private # Helsenett adresse på RFC1918 adresse
-ipam.vitistack.io/zone: hnet         # Helsenett adresse på offentlig adresseomeråde
+ipam.vitistack.io/zone: hnet-public  # Helsenett adresse på offentlig adresseomeråde
 ipam.vitistack.io/zone: inet         # Internett adresse
 ```
 Det er ikke mulig å endre infrastruktur på en eksisterende gateway. Da må man opprette en ny gateway ved å definere ett nytt navn under "parentRefs" på HTTPRouten.
