@@ -117,9 +117,7 @@ metadata:
   namespace: <namespace>
 spec:
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: <navn på Gateway der eksisterende HTTPS HTTProute peker>
+    - name: <navn på Gateway der eksisterende HTTPS HTTProute peker>
       namespace: <namespace på Gateway>
       sectionName: <fqdn>-http
   hostnames:
