@@ -23,6 +23,9 @@ const (
 	// httpsPort is the default HTTPS port
 	httpsPort = 443
 
+	// httpport is the default httpport
+	httpPort = 80
+
 	// tlsCertSuffix is the suffix for TLS certificate secret names
 	tlsCertSuffix = "-tls"
 
