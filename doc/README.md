@@ -100,17 +100,50 @@ spec:
 kubectl get gateways -n <namespace du valgte på parentRefs over>
 ```
 
+### Konfigurering av redirect:
+https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/ <br>
+(Gatewayapi-Operatoren oppretter ikke automatisk en redirect listener på Gatewayen, men dette er planlagt i en fremtidig release)
+
+For å konfigurere en redirect kan følgende eksempel benyttes:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  annotations:
+    gatewayapi-operator.vitistack.io/enabled: "true"
+    gatewayapi-operator.vitistack.io/http: "true"
+  name: <name>_redirect
+  namespace: <namespace>
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: <navn på Gateway der eksisterende HTTPS HTTProute peker>
+      namespace: <namespace på Gateway>
+      sectionName: <fqdn>-http
+  hostnames:
+    - <fqdn>
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+```
+
+
+### TLS mot backend - Konfigurering av BackendTLSPolicy:
+Eksempel kommer, men følgende dokumentasjon kan benyttes for å re-kryptere trafikk mot service som HTTPRouten peker på.
+https://gateway.envoyproxy.io/docs/api/gateway_api/backendtlspolicy/
+
+
+
+
 ### Kjente feil
 1. **Flere httproutes med forskjellige cluster-issuer annoteringer som peker på samme gateway er ikke mulig. Lag en ny gateway per cluster-issuer.**
 2. **Flere httproutes med forskjellige ipam.vitistack.io/zone annoteringer er ikke mulig. Lag en ny gateway per IPAM zone.**
 3. **Redirect og BackendTLSPolicy må konfigureres manuelt. Det er ikke implementert i GatewayAPI-Operatoren enda.**
 
 
-
-#### Konfigurering av redirect:
-https://gateway.envoyproxy.io/docs/tasks/traffic/http-redirect/ <br>
-(Gatewayapi-Operatoren oppretter ikke automatisk en redirect listener på Gatewayen, men dette er planlagt i en fremtidig release)
-
-#### TLS mot backend - Konfigurering av BackendTLSPolicy
-https://gateway.envoyproxy.io/docs/api/gateway_api/backendtlspolicy/
 
