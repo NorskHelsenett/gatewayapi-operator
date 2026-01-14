@@ -5,6 +5,9 @@ const (
 	// Decides if we should ignore the httproute or not
 	// value type: bool
 	AnnotationUseHttprouteOperator = "gatewayapi-operator.vitistack.io/enabled"
+
+	// Decides if we should create the listener for HTTPRoute on port 80 without TLS
+	AnnotationHttpOnlyListener = "gatewayapi-operator.vitistack.io/http"
 	// AnnotationIPAMZone specifies the zone
 	// Value type: string
 	AnnotationIPAMZone = "ipam.vitistack.io/zone"

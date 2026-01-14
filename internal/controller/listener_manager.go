@@ -29,6 +29,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 	// Collect unique hostnames from HTTPRoutes that reference this Gateway
 	hostnameSet := make(map[string]bool)
+	httpHostnameSet := make(map[string]bool)
 	routeCount := 0
 	skippedCount := 0
 
@@ -39,6 +40,8 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 			skippedCount++
 			continue
 		}
+		// Filter out all httproutes that are not enabled for this operator
+
 		if route.Annotations[AnnotationUseHttprouteOperator] != "true" {
 			skippedCount++
 			continue
@@ -56,7 +59,14 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 				routeCount++
 				// Collect all hostnames from this route
 				for _, hostname := range route.Spec.Hostnames {
-					hostnameSet[string(hostname)] = true
+					// Add all httproutes that should be created on port 80 without TLS (redirect)
+					if route.Annotations[AnnotationHttpOnlyListener] == "true" {
+						httpHostnameSet[string(hostname)] = true
+					} else {
+						// Add all TLS 443 http(s)routes
+						hostnameSet[string(hostname)] = true
+
+					}
 					log.Info("Collected hostname", "hostname", hostname, "route", route.Name, "gateway", gatewayName)
 				}
 				break
@@ -65,20 +75,22 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	}
 
 	// Create HTTPS listeners for all collected hostnames
-	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet))
+	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet)+len(httpHostnameSet))
 	// listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)*2)
-	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet))
+	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
 	for hostname := range hostnameSet {
 		httpsListener := r.createHTTPSListener(hostname, gatewayNamespace)
 		log.Info("Created HTTPS listener", "name", httpsListener.Name, "hostname", hostname)
 		listeners = append(listeners, httpsListener)
-		// httpListener := r.createHTTPListener(hostname)
-		// log.Info("Created HTTP listener", "name", httpListener.Name, "hostname", hostname)
-		// listeners = append(listeners, httpListener)
+
 	}
 
-	// TODO: maybe (?) call create redirect httproute function here
+	for httpHostname := range httpHostnameSet {
+		httpListener := r.createHTTPListener(httpHostname)
+		log.Info("Created HTTP listener", "name", httpListener.Name, "hostname", httpHostname)
+		listeners = append(listeners, httpListener)
+	}
 
 	log.Info("Collected listeners for Gateway",
 		"gateway", gatewayName,
@@ -131,26 +143,26 @@ func (r *HTTPRouteReconciler) createHTTPSListener(
 	}
 }
 
-// func (r *HTTPRouteReconciler) createHTTPListener(
-// 	hostname string,
-// ) gatewayv1.Listener {
-// 	// Use hostname as the listener section name
-// 	listenerName := gatewayv1.SectionName(hostname) + "-http"
-// 	hn := gatewayv1.Hostname(hostname)
-// 	fromAll := gatewayv1.NamespacesFromAll
+func (r *HTTPRouteReconciler) createHTTPListener(
+	hostname string,
+) gatewayv1.Listener {
+	// Use hostname as the listener section name
+	listenerName := gatewayv1.SectionName(hostname) + "-http"
+	hn := gatewayv1.Hostname(hostname)
+	fromAll := gatewayv1.NamespacesFromAll
 
-// 	return gatewayv1.Listener{
-// 		Name:     listenerName,
-// 		Protocol: gatewayv1.HTTPProtocolType,
-// 		Port:     httpPort,
-// 		Hostname: &hn,
-// 		AllowedRoutes: &gatewayv1.AllowedRoutes{
-// 			Namespaces: &gatewayv1.RouteNamespaces{
-// 				From: &fromAll,
-// 			},
-// 		},
-// 	}
-// }
+	return gatewayv1.Listener{
+		Name:     listenerName,
+		Protocol: gatewayv1.HTTPProtocolType,
+		Port:     httpPort,
+		Hostname: &hn,
+		AllowedRoutes: &gatewayv1.AllowedRoutes{
+			Namespaces: &gatewayv1.RouteNamespaces{
+				From: &fromAll,
+			},
+		},
+	}
+}
 
 // updateGatewayListeners updates the gateway's listeners based on all HTTPRoutes referencing it
 func (r *HTTPRouteReconciler) updateGatewayListeners(
