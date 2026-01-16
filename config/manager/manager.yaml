@@ -25,7 +25,7 @@ spec:
   template:
     metadata:
       annotations:
-        kubectl.kubernetes.io/default-container: manager
+        kubectl.kubernetes.io/default-container: gatewayapi-operator
       labels:
         control-plane: controller-manager
         app.kubernetes.io/name: gatewayapi-operator
@@ -64,7 +64,7 @@ spec:
             - --leader-elect
             - --health-probe-bind-address=:8081
           image: controller:latest
-          name: manager
+          name: gatewayapi-operator
           ports: []
           securityContext:
             readOnlyRootFilesystem: true
