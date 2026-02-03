@@ -67,7 +67,6 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 						hostnameSet[string(hostname)] = true
 
 					}
-					log.Info("Collected hostname", "hostname", hostname, "route", route.Name, "gateway", gatewayName)
 				}
 				break
 			}
