@@ -16,6 +16,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
 	ipamZone string,
+	ipFamily string,
 	clusterIssuer string,
 ) error {
 	log := logf.FromContext(ctx)
@@ -31,7 +32,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		if errors.IsNotFound(err) {
 			// Gateway doesn't exist, create it
 			log.Info("Creating new Gateway", "gateway", gatewayName, "namespace", gatewayNamespace)
-			return r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, clusterIssuer)
+			return r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer)
 		}
 		log.Error(err, "Failed to get Gateway", "gateway", gatewayName)
 		return err
@@ -66,6 +67,7 @@ func (r *HTTPRouteReconciler) createGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
 	ipamZone string,
+	ipFamily string,
 	clusterIssuer string,
 ) error {
 	log := logf.FromContext(ctx)
@@ -90,7 +92,8 @@ func (r *HTTPRouteReconciler) createGateway(
 			Listeners:        listeners,
 			Infrastructure: &gatewayv1.GatewayInfrastructure{
 				Annotations: map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
-					"ipam.vitistack.io/zone": gatewayv1.AnnotationValue(ipamZone),
+					"ipam.vitistack.io/zone":      gatewayv1.AnnotationValue(ipamZone),
+					"ipam.vitistack.io/ip-family": gatewayv1.AnnotationValue(ipFamily),
 				},
 			},
 		},
