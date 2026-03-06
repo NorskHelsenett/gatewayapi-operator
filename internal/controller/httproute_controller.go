@@ -194,6 +194,16 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Info("No IPAM zone annotation found, using default", "ipamZone", ipamZone)
 	}
 
+	// Get ip-family from HTTProute or use the appropriate default for zone
+	ipFamily := httpRoute.Annotations[AnnotationIpFamily]
+	if ipFamily == "" {
+		if ipamZone == inetIPAMZone {
+			ipFamily = defaultInetIpFamily
+		} else {
+			ipFamily = defaultHnetIpFamily
+		}
+		log.Info("No ip-family annotation found, using default for zone", "ipFamily", ipamZone)
+	}
 	// Get cluster issuer from annotation or use default
 	clusterIssuer := httpRoute.Annotations[AnnotationClusterIssuer]
 	if clusterIssuer == "" {
@@ -202,7 +212,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Ensure the Gateway exists and has correct listeners
-	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, clusterIssuer); err != nil {
+	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
 		log.Error(err, "Failed to ensure Gateway")
 		return ctrl.Result{}, err
 	}
