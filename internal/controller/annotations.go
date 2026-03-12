@@ -14,4 +14,6 @@ const (
 	// AnnotationClusterIssuer specifies the cert-manager cluster issuer for TLS certificates
 	// Value type: string
 	AnnotationClusterIssuer = "gatewayapi-operator.vitistack.io/cluster-issuer"
+
+	AnnotationIpFamily = "ipam.vitistack.io/ip-family"
 )
