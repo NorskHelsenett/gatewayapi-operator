@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,7 +16,7 @@ import (
 func (r *HTTPRouteReconciler) collectListenersForGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
-) ([]gatewayv1.Listener, error) {
+) ([]gatewayv1.Listener, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
 	log := logf.FromContext(ctx)
 
 	// List all HTTPRoutes that reference this gateway
@@ -24,12 +25,16 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	listOpts := []client.ListOption{}
 	// Bypass cache to get the most up-to-date list
 	if err := r.List(ctx, httpRouteList, listOpts...); err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Collect unique hostnames from HTTPRoutes that reference this Gateway
 	hostnameSet := make(map[string]bool)
 	httpHostnameSet := make(map[string]bool)
+	ignoreDnsUpdates := make(annotations.IgnoreDnsUpdates)
+	overrideTtl := make(annotations.OverrideTtl)
+	overrideInfrastructure := make(annotations.OverrideInfrastrucutre)
+
 	routeCount := 0
 	skippedCount := 0
 
@@ -65,8 +70,17 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 					} else {
 						// Add all TLS 443 http(s)routes
 						hostnameSet[string(hostname)] = true
-
 					}
+
+					// Parse the "dns.nhn.no/ignore: <boolean>" if present on the HTTProute
+					ignoreDnsUpdates.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationDnsIgnore])
+
+					// Parse the "dns.nhn.no/override-infrastructure: '{"infrastructure":["<infrastructure>","<infrastructure>"]}'" if present on the HTTProute
+					overrideInfrastructure.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationOverrideInfrastructure])
+
+					// Parse the "dns.nhn.no/override-ttl: '<int>'"" if present on the HTTProute
+					overrideTtl.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationOverrideTTL])
+
 				}
 				break
 			}
@@ -75,7 +89,6 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 	// Create HTTPS listeners for all collected hostnames
 	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet)+len(httpHostnameSet))
-	// listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)*2)
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
 	for hostname := range hostnameSet {
@@ -97,7 +110,8 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		"activeRoutes", routeCount,
 		"skippedRoutes", skippedCount,
 		"totalRoutes", len(httpRouteList.Items))
-	return listeners, nil
+
+	return listeners, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
 }
 
 // createHTTPSListener creates an HTTPS listener for a hostname with TLS configuration
@@ -173,8 +187,8 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 
 	gatewayName := gateway.Name
 
-	// Collect listeners from all HTTPRoutes referencing this gateway
-	newListeners, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	// Collect listeners and annotations from all HTTPRoutes referencing this gateway
+	newListeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		return err
 	}
@@ -206,6 +220,9 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		}
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
+		latest.ObjectMeta.Annotations[annotations.AnnotationDnsIgnore] = ignoreDnsUpdatesAnnoation.ConvertToGatewayAnnotation()
+		latest.ObjectMeta.Annotations[annotations.AnnotationOverrideInfrastructure] = overrideinfrastructureAnnoation.ConvertToGatewayAnnotation()
+		latest.ObjectMeta.Annotations[annotations.AnnotationOverrideTTL] = overrideTtlAnnotation.ConvertToGatewayAnnotation()
 
 		return r.Update(ctx, &latest)
 	})

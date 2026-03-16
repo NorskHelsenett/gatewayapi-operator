@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -73,7 +74,7 @@ func (r *HTTPRouteReconciler) createGateway(
 	log := logf.FromContext(ctx)
 
 	// Collect all listeners from HTTPRoutes that reference this gateway
-	listeners, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	listeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		log.Error(err, "Failed to collect listeners for new Gateway")
 		return err
@@ -98,6 +99,10 @@ func (r *HTTPRouteReconciler) createGateway(
 			},
 		},
 	}
+
+	newGateway.ObjectMeta.Annotations[annotations.AnnotationDnsIgnore] = ignoreDnsUpdatesAnnoation.ConvertToGatewayAnnotation()
+	newGateway.ObjectMeta.Annotations[annotations.AnnotationOverrideInfrastructure] = overrideinfrastructureAnnoation.ConvertToGatewayAnnotation()
+	newGateway.ObjectMeta.Annotations[annotations.AnnotationOverrideTTL] = overrideTtlAnnotation.ConvertToGatewayAnnotation()
 
 	if err := r.Create(ctx, newGateway); err != nil {
 		log.Error(err, "Failed to create Gateway", "gateway", gatewayName)
