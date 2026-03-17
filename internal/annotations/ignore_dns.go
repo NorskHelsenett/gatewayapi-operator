@@ -1,32 +1,32 @@
 package annotations
 
 import (
-	"encoding/json"
+	"strings"
 )
 
-type IgnoreDnsUpdates map[string]bool
+type IgnoreDnsUpdates []string
 
 func (m *IgnoreDnsUpdates) ConvertToGatewayAnnotation() string {
 	if m == nil || *m == nil {
-		return "{}"
+		return ""
 	}
 
-	data, err := json.Marshal(*m)
-	if err != nil {
-		return "{}"
-	}
-
-	return string(data)
+	return strings.Join(*m, ",")
 
 }
 
 func (m *IgnoreDnsUpdates) ParseAnnotation(fqdn string, annotation string) error {
-	if annotation != "false" {
+	// Check if someone misspelled "true" or if it is not set
+	if annotation != "false" && annotation != "" {
 		if *m == nil {
-			*m = make(IgnoreDnsUpdates)
+			*m = make(IgnoreDnsUpdates, 0, 1)
 		}
-		(*m)[fqdn] = true
+		*m = append(*m, fqdn)
 		return nil
 	}
 	return nil
+}
+
+func NewIgnoreDnsUpdates() IgnoreDnsUpdates {
+	return make(IgnoreDnsUpdates, 0)
 }

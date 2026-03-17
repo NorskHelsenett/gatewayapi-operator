@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 
-	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -100,9 +99,7 @@ func (r *HTTPRouteReconciler) createGateway(
 		},
 	}
 
-	newGateway.ObjectMeta.Annotations[annotations.AnnotationDnsIgnore] = ignoreDnsUpdatesAnnoation.ConvertToGatewayAnnotation()
-	newGateway.ObjectMeta.Annotations[annotations.AnnotationOverrideInfrastructure] = overrideinfrastructureAnnoation.ConvertToGatewayAnnotation()
-	newGateway.ObjectMeta.Annotations[annotations.AnnotationOverrideTTL] = overrideTtlAnnotation.ConvertToGatewayAnnotation()
+	UpdateGatewayAnnotations(ctx, newGateway, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
 	if err := r.Create(ctx, newGateway); err != nil {
 		log.Error(err, "Failed to create Gateway", "gateway", gatewayName)

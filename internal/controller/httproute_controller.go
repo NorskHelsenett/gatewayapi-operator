@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 
-	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
@@ -287,9 +286,7 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 			Listeners:        listeners,
 		},
 	}
-	patch.ObjectMeta.Annotations[annotations.AnnotationDnsIgnore] = ignoreDnsUpdatesAnnoation.ConvertToGatewayAnnotation()
-	patch.ObjectMeta.Annotations[annotations.AnnotationOverrideInfrastructure] = overrideinfrastructureAnnoation.ConvertToGatewayAnnotation()
-	patch.ObjectMeta.Annotations[annotations.AnnotationOverrideTTL] = overrideTtlAnnotation.ConvertToGatewayAnnotation()
+	UpdateGatewayAnnotations(ctx, patch, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
 	err = r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator"))
 	if err != nil {

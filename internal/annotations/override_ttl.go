@@ -8,13 +8,13 @@ import (
 type OverrideTtl map[string]int64
 
 func (m *OverrideTtl) ConvertToGatewayAnnotation() string {
-	if m == nil || *m == nil {
-		return "{}"
+	if m == nil || *m == nil || len(*m) == 0 {
+		return ""
 	}
 
 	data, err := json.Marshal(*m)
 	if err != nil {
-		return "{}"
+		return ""
 	}
 
 	return string(data)
@@ -35,4 +35,8 @@ func (m *OverrideTtl) ParseAnnotation(fqdn string, annotation string) error {
 		return nil
 	}
 	return nil
+}
+
+func NewOverrideTtl() OverrideTtl {
+	return make(OverrideTtl, 0)
 }
