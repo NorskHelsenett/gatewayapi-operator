@@ -9,13 +9,13 @@ import (
 type OverrideInfrastrucutre map[string][]string
 
 func (m *OverrideInfrastrucutre) ConvertToGatewayAnnotation() string {
-	if m == nil || *m == nil {
-		return "{}"
+	if m == nil || *m == nil || len(*m) == 0 {
+		return ""
 	}
 
 	data, err := json.Marshal(*m)
 	if err != nil {
-		return "{}"
+		return ""
 	}
 
 	return string(data)
@@ -42,4 +42,8 @@ func (m *OverrideInfrastrucutre) ParseAnnotation(fqdn string, annotation string)
 
 	(*m)[fqdn] = append((*m)[fqdn], parsed.Infrastructure...)
 	return nil
+}
+
+func NewOverrideInfrastructure() OverrideInfrastrucutre {
+	return make(OverrideInfrastrucutre, 0)
 }
