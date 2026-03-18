@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-type OverrideTtl map[string]int64
+type OverrideTtl map[string]string
 
 func (m *OverrideTtl) ConvertToGatewayAnnotation() string {
 	if m == nil || *m == nil || len(*m) == 0 {
@@ -24,14 +24,14 @@ func (m *OverrideTtl) ParseAnnotation(fqdn string, annotation string) error {
 
 	// Parse the "dns.nhn.no/override-ttl: '<int>'"" if present on the HTTProute
 	if annotation != "" {
-		parsed, err := strconv.ParseInt(annotation, 10, 64)
+		_, err := strconv.ParseInt(annotation, 10, 64)
 		if err != nil {
 			return err
 		}
 		if *m == nil {
 			*m = make(OverrideTtl)
 		}
-		(*m)[fqdn] = parsed
+		(*m)[fqdn] = annotation
 		return nil
 	}
 	return nil
