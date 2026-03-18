@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,7 +16,7 @@ import (
 func (r *HTTPRouteReconciler) collectListenersForGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
-) ([]gatewayv1.Listener, error) {
+) ([]gatewayv1.Listener, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
 	log := logf.FromContext(ctx)
 
 	// List all HTTPRoutes that reference this gateway
@@ -24,12 +25,17 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	listOpts := []client.ListOption{}
 	// Bypass cache to get the most up-to-date list
 	if err := r.List(ctx, httpRouteList, listOpts...); err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Collect unique hostnames from HTTPRoutes that reference this Gateway
 	hostnameSet := make(map[string]bool)
 	httpHostnameSet := make(map[string]bool)
+
+	ignoreDnsUpdates := annotations.NewIgnoreDnsUpdates()
+	overrideTtl := annotations.NewOverrideTtl()
+	overrideInfrastructure := annotations.NewOverrideInfrastructure()
+
 	routeCount := 0
 	skippedCount := 0
 
@@ -65,8 +71,17 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 					} else {
 						// Add all TLS 443 http(s)routes
 						hostnameSet[string(hostname)] = true
-
 					}
+
+					// Parse the "dns.nhn.no/ignore: <boolean>" if present on the HTTProute
+					ignoreDnsUpdates.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationDnsIgnore])
+
+					// Parse the "dns.nhn.no/override-infrastructure: '{"infrastructure":["<infrastructure>","<infrastructure>"]}'" if present on the HTTProute
+					overrideInfrastructure.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationOverrideInfrastructure])
+
+					// Parse the "dns.nhn.no/override-ttl: '<int>'"" if present on the HTTProute
+					overrideTtl.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationOverrideTTL])
+
 				}
 				break
 			}
@@ -75,7 +90,6 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 	// Create HTTPS listeners for all collected hostnames
 	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet)+len(httpHostnameSet))
-	// listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)*2)
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
 	for hostname := range hostnameSet {
@@ -97,7 +111,8 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		"activeRoutes", routeCount,
 		"skippedRoutes", skippedCount,
 		"totalRoutes", len(httpRouteList.Items))
-	return listeners, nil
+
+	return listeners, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
 }
 
 // createHTTPSListener creates an HTTPS listener for a hostname with TLS configuration
@@ -173,8 +188,8 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 
 	gatewayName := gateway.Name
 
-	// Collect listeners from all HTTPRoutes referencing this gateway
-	newListeners, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	// Collect listeners and annotations from all HTTPRoutes referencing this gateway
+	newListeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		return err
 	}
@@ -207,6 +222,9 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
 
+		// Update the gateway
+		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
+
 		return r.Update(ctx, &latest)
 	})
 
@@ -222,6 +240,41 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	} else {
 		log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
 		return nil
+	}
+
+}
+
+func UpdateGatewayAnnotations(ctx context.Context, gw *gatewayv1.Gateway, ignoreDns annotations.IgnoreDnsUpdates, overrideInfra annotations.OverrideInfrastrucutre, overrideTTL annotations.OverrideTtl) {
+	log := logf.FromContext(ctx)
+
+	dnsIgnoreAnnotationVal := ignoreDns.ConvertToGatewayAnnotation()
+	dnsOverrideInfraVal := overrideInfra.ConvertToGatewayAnnotation()
+	dnsOverrideTtl := overrideTTL.ConvertToGatewayAnnotation()
+
+	if dnsIgnoreAnnotationVal != "" {
+		gw.ObjectMeta.Annotations[annotations.AnnotationDnsIgnore] = dnsIgnoreAnnotationVal
+		log.Info("Updated gateway annotation dns.nhn.no/ignore")
+	} else {
+		log.Info("Deleting gateway annotation dns.nhn.no/ignore")
+		delete(gw.ObjectMeta.Annotations, annotations.AnnotationDnsIgnore)
+	}
+
+	if dnsOverrideInfraVal != "" {
+		gw.ObjectMeta.Annotations[annotations.AnnotationOverrideInfrastructure] = dnsOverrideInfraVal
+		log.Info("Updated gateway annotation dns.nhn.no/override-infrastructure")
+
+	} else {
+		log.Info("Deleting gateway annotation dns.nhn.no/override-infrastructure")
+		delete(gw.ObjectMeta.Annotations, annotations.AnnotationOverrideInfrastructure)
+	}
+
+	if dnsOverrideTtl != "" {
+		gw.ObjectMeta.Annotations[annotations.AnnotationOverrideTTL] = dnsOverrideTtl
+		log.Info("Updated gateway annotation dns.nhn.no/override-ttl")
+
+	} else {
+		log.Info("Deleting gateway annotation dns.nhn.no/override-ttl")
+		delete(gw.ObjectMeta.Annotations, annotations.AnnotationOverrideTTL)
 	}
 
 }

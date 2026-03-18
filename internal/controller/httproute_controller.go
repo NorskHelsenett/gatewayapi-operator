@@ -255,7 +255,7 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 	}
 
 	// Collect listeners for the old gateway (excluding routes that no longer reference it)
-	listeners, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	listeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		return err
 	}
@@ -286,6 +286,7 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 			Listeners:        listeners,
 		},
 	}
+	UpdateGatewayAnnotations(ctx, patch, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
 	err = r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator"))
 	if err != nil {
