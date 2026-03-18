@@ -1,0 +1,42 @@
+package annotations
+
+import (
+	"encoding/json"
+	"strconv"
+)
+
+type OverrideTtl map[string]string
+
+func (m *OverrideTtl) ConvertToGatewayAnnotation() string {
+	if m == nil || *m == nil || len(*m) == 0 {
+		return ""
+	}
+
+	data, err := json.Marshal(*m)
+	if err != nil {
+		return ""
+	}
+
+	return string(data)
+}
+
+func (m *OverrideTtl) ParseAnnotation(fqdn string, annotation string) error {
+
+	// Parse the "dns.nhn.no/override-ttl: '<int>'"" if present on the HTTProute
+	if annotation != "" {
+		_, err := strconv.ParseInt(annotation, 10, 64)
+		if err != nil {
+			return err
+		}
+		if *m == nil {
+			*m = make(OverrideTtl)
+		}
+		(*m)[fqdn] = annotation
+		return nil
+	}
+	return nil
+}
+
+func NewOverrideTtl() OverrideTtl {
+	return make(OverrideTtl, 0)
+}
