@@ -48,7 +48,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		}
 		// Filter out all httproutes that are not enabled for this operator
 
-		if route.Annotations[AnnotationUseHttprouteOperator] != "true" {
+		if route.Annotations[annotations.AnnotationUseHttprouteOperator] != "true" {
 			skippedCount++
 			continue
 		}
@@ -66,7 +66,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 				// Collect all hostnames from this route
 				for _, hostname := range route.Spec.Hostnames {
 					// Add all httproutes that should be created on port 80 without TLS (redirect)
-					if route.Annotations[AnnotationHttpOnlyListener] == "true" {
+					if route.Annotations[annotations.AnnotationHttpOnlyListener] == "true" {
 						httpHostnameSet[string(hostname)] = true
 					} else {
 						// Add all TLS 443 http(s)routes

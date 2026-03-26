@@ -15,5 +15,10 @@ resources:
   domain: example.com
   group: gateway
   kind: HTTPRoute
+  path: github.com/NorskHelsenett/gatewayapi-operator/api/v1
   version: v1
+  webhooks:
+    validation: true
+    validationPath: /gatewayapi-operator-httproute-validator
+    webhookVersion: v1
 version: "3"

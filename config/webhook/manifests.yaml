@@ -1,0 +1,26 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /gatewayapi-operator-httproute-validator
+  failurePolicy: Fail
+  name: vhttproute-v1.kb.io
+  rules:
+  - apiGroups:
+    - gateway.example.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - httproutes
+  sideEffects: None
