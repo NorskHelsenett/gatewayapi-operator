@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
@@ -40,7 +41,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Skip if operator is not enabled for this HTTPRoute
-	if httpRoute.Annotations[AnnotationUseHttprouteOperator] != "true" {
+	if httpRoute.Annotations[annotations.AnnotationUseHttprouteOperator] != "true" {
 		log.Info("Skipping HTTPRoute - operator not enabled", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
 		return ctrl.Result{}, nil
 	}
@@ -188,14 +189,14 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Get IPAM zone from annotation or use default
-	ipamZone := httpRoute.Annotations[AnnotationIPAMZone]
+	ipamZone := httpRoute.Annotations[annotations.AnnotationIPAMZone]
 	if ipamZone == "" {
 		ipamZone = defaultIPAMZone
 		log.Info("No IPAM zone annotation found, using default", "ipamZone", ipamZone)
 	}
 
 	// Get ip-family from HTTProute or use the appropriate default for zone
-	ipFamily := httpRoute.Annotations[AnnotationIpFamily]
+	ipFamily := httpRoute.Annotations[annotations.AnnotationIpFamily]
 	if ipFamily == "" {
 		if ipamZone == inetIPAMZone {
 			ipFamily = defaultInetIpFamily
@@ -205,7 +206,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.Info("No ip-family annotation found, using default for zone", "ipFamily", ipamZone)
 	}
 	// Get cluster issuer from annotation or use default
-	clusterIssuer := httpRoute.Annotations[AnnotationClusterIssuer]
+	clusterIssuer := httpRoute.Annotations[annotations.AnnotationClusterIssuer]
 	if clusterIssuer == "" {
 		clusterIssuer = defaultClusterIssuer
 		log.Info("No cluster issuer annotation found, using default", "clusterIssuer", clusterIssuer)
