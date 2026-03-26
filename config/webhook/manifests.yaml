@@ -15,7 +15,7 @@ webhooks:
   name: vhttproute-v1.kb.io
   rules:
   - apiGroups:
-    - gateway.example.com
+    - gateway.networking.k8s.io
     apiVersions:
     - v1
     operations:
