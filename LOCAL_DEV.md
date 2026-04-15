@@ -94,8 +94,49 @@ make run
 Wait for `Serving webhook server {"host": "", "port": 9443}` before proceeding.
 
 **Terminal 2 — test:**
+
+Valid HTTPRoutes (should be accepted):
 ```sh
 kubectl apply -f test-httproutes/http-httproute.yaml
+kubectl apply -f test-httproutes/https-httproute.yaml
+kubectl apply -f test-httproutes/http-httproute-new-gw.yaml
+```
+
+Invalid HTTPRoutes (should be **rejected** by the webhook). These test-httproutes reference a
+shared Gateway (`test-gw`) that already exists with specific annotations. Each file deliberately
+sets a conflicting annotation so the webhook denies the request.
+
+**Zone mismatch** — HTTPRoute zone differs from the Gateway's `ipam.vitistack.io/zone`:
+```sh
+kubectl apply -f test-httproutes/invalids/zone/public.yaml    # zone "hnet" vs Gateway's zone
+kubectl apply -f test-httproutes/invalids/zone/private.yaml   # zone "hnet-private" vs Gateway's zone
+```
+
+**Issuer mismatch** — HTTPRoute cluster-issuer differs from the Gateway's `cert-manager.io/cluster-issuer`:
+```sh
+kubectl apply -f test-httproutes/invalids/issuer/le.yaml          # issuer "letsencrypt-staging" vs Gateway's issuer
+kubectl apply -f test-httproutes/invalids/issuer/internpki.yaml   # issuer "internpki" vs Gateway's issuer
+```
+
+**IP family mismatch** — HTTPRoute ip-family differs from the Gateway's `ipam.vitistack.io/ip-family`:
+```sh
+kubectl apply -f test-httproutes/invalids/ipfamily/dual.yaml   # ip-family "dual" vs Gateway's ip-family
+kubectl apply -f test-httproutes/invalids/ipfamily/ipv4.yaml   # ip-family "ipv4" vs Gateway's ip-family
+kubectl apply -f test-httproutes/invalids/ipfamily/ipv6.yaml   # ip-family "ipv6" vs Gateway's ip-family
+```
+
+Each invalid apply should return an error like:
+```
+Error from server (HTTPRoute <annotation> conflicts with existing Gateway ...)
+```
+
+**Cleanup** — remove test resources and webhook configuration:
+```sh
+kubectl delete -f test-httproutes/invalids/ipfamily/dual.yaml --ignore-not-found
+kubectl delete -f test-httproutes/http-httproute.yaml --ignore-not-found
+kubectl delete -f test-httproutes/https-httproute.yaml --ignore-not-found
+kubectl delete -f test-httproutes/http-httproute-new-gw.yaml --ignore-not-found
+kubectl delete validatingwebhookconfiguration httproute-validator --ignore-not-found
 ```
 
 ### Notes
