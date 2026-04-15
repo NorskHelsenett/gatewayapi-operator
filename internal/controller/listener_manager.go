@@ -143,7 +143,7 @@ func (r *HTTPRouteReconciler) createHTTPSListener(
 				From: &fromAll,
 			},
 		},
-		TLS: &gatewayv1.GatewayTLSConfig{
+		TLS: &gatewayv1.ListenerTLSConfig{
 			Mode: &terminate,
 			CertificateRefs: []gatewayv1.SecretObjectReference{
 				{
