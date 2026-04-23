@@ -36,7 +36,7 @@ func isHttprouteAndGatewayZoneMatching(httprouteZone string, gateway *gatewayv1.
 
 	gatewayZone := string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone])
 
-	// Zone on Gatway is not set. Validate HTTPRoute
+	// Zone on Gateway is not set. Validate HTTPRoute
 	if gatewayZone == "" {
 		return true
 	}
