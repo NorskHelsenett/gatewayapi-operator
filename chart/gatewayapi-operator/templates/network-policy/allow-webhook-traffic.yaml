@@ -1,3 +1,4 @@
+{{- if .Values.networkPolicy.enable }}
 # This NetworkPolicy allows ingress traffic to your webhook server running
 # as part of the controller-manager from specific namespaces and pods. CR(s) which uses webhooks
 # will only work when applied in namespaces labeled with 'webhook: enabled'
@@ -5,10 +6,9 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   labels:
-    app.kubernetes.io/name: gatewayapi-operator
-    app.kubernetes.io/managed-by: kustomize
+    {{- include "chart.labels" . | nindent 4 }}
   name: allow-webhook-traffic
-  namespace: system
+  namespace: {{ .Values.namespace }}
 spec:
   podSelector:
     matchLabels:
@@ -17,13 +17,12 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-
-    # Allow webhook calls from the Kubernetes API server namespace and from namespaces
-    # explicitly labeled for webhook-enabled workloads.
+    # This allows ingress traffic from any namespace with the label webhook: enabled
     - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
       ports:
         - port: 443
           protocol: TCP
+{{- end -}}
