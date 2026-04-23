@@ -10,7 +10,7 @@ import (
 func ValidateIssuer(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteIssuer := httproute.GetAnnotations()[annotations.AnnotationClusterIssuer]
 
-	// If HTTPRoute zone is not set, lets default it to internpki like the gatewayapi-operator does
+	// If HTTPRoute issuer is not set, skip validation
 	if httprouteIssuer == "" {
 		httprouteIssuer = "internpki"
 	}
@@ -32,7 +32,7 @@ func isHttprouteAndGatewayIssuerMatching(httprouteIssuer string, gateway *gatewa
 
 	gatewayIssuer := string(gateway.ObjectMeta.Annotations[annotations.AnnotationCertManagerClusterIssuer])
 
-	// Issuer on Gatway is not set. Validate HTTPRoute
+	// Issuer on Gateway is not set. Validate HTTPRoute
 	if gatewayIssuer == "" {
 		return true
 	}
