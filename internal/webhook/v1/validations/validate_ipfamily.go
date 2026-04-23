@@ -10,7 +10,7 @@ import (
 func ValidateIpfamily(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteIpFamily := httproute.GetAnnotations()[annotations.AnnotationIpFamily]
 
-	// If HTTPRoute zone is not set it does not matter
+	// If HTTPRoute ip-family is not set, skip validation
 	if httprouteIpFamily == "" {
 		return nil
 	}
