@@ -10,7 +10,7 @@ import (
 func ValidateIssuer(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteIssuer := httproute.GetAnnotations()[annotations.AnnotationClusterIssuer]
 
-	// If HTTPRoute issuer is not set, skip validation
+	// If HTTPRoute issuer is not set, default to "internpki" and continue validation
 	if httprouteIssuer == "" {
 		httprouteIssuer = "internpki"
 	}
