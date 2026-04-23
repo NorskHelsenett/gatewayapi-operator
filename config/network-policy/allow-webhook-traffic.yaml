@@ -18,12 +18,11 @@ spec:
     - Ingress
   ingress:
 
-    # Allow webhook calls from the Kubernetes API server namespace and from namespaces
-    # explicitly labeled for webhook-enabled workloads.
+    # Allow webhook calls from the Kubernetes API server namespace.
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
       ports:
-        - port: 443
+        - port: 9443
           protocol: TCP
