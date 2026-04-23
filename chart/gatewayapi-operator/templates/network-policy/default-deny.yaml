@@ -1,0 +1,20 @@
+{{- if .Values.networkPolicy.enable }}
+# This NetworkPolicy denies all ingress traffic to the controller-manager pod
+# by default. Other NetworkPolicies (e.g. allow-metrics-traffic, allow-webhook-traffic)
+# additively permit specific traffic on top of this baseline.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: default-deny
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: gatewayapi-operator
+  policyTypes:
+    - Ingress
+  ingress: []
+{{- end -}}
