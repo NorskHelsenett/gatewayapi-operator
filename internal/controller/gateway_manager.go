@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,24 +42,25 @@ func (r *HTTPRouteReconciler) ensureGateway(
 	// Gateway exists, validate cluster issuer matches
 	existingIssuer := gateway.Annotations[clusterIssuerAnnotation]
 	if existingIssuer != clusterIssuer {
-		err := errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
-		log.Error(err, "Cluster issuer mismatch", "gateway", gatewayName, "gatewayIssuer", existingIssuer, "routeIssuer", clusterIssuer)
-		return err
+		return errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
 	}
 
-	// Gateway exists, validate IPAM zone matches if set
+	// Gateway exists, validate IPAM zone and ip-family match if set
 	if gateway.Spec.Infrastructure != nil && gateway.Spec.Infrastructure.Annotations != nil {
-		if existingZone, exists := gateway.Spec.Infrastructure.Annotations["ipam.vitistack.io/zone"]; exists {
+		if existingZone, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
 			if string(existingZone) != ipamZone {
-				err := errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
-				log.Error(err, "IPAM zone mismatch", "gateway", gatewayName, "gatewayZone", string(existingZone), "routeZone", ipamZone)
-				return err
+				return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
+			}
+		}
+		if existingFamily, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily]; exists {
+			if string(existingFamily) != ipFamily {
+				return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 			}
 		}
 	}
 
 	// Gateway exists and configuration matches, update listeners
-	log.Info("Gateway exists, updating listeners", "gateway", gatewayName, "namespace", gatewayNamespace)
+	log.V(1).Info("Gateway exists, updating listeners", "gateway", gatewayName, "namespace", gatewayNamespace)
 	return r.updateGatewayListeners(ctx, gateway, gatewayNamespace)
 }
 
@@ -102,6 +104,36 @@ func (r *HTTPRouteReconciler) createGateway(
 	UpdateGatewayAnnotations(ctx, newGateway, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
 	if err := r.Create(ctx, newGateway); err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Another reconcile created the gateway concurrently; fetch, validate, and update it
+			log.Info("Gateway already exists (concurrent create), validating and updating listeners", "gateway", gatewayName)
+			existing := &gatewayv1.Gateway{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, existing); getErr != nil {
+				log.Error(getErr, "Failed to get Gateway after concurrent create", "gateway", gatewayName)
+				return getErr
+			}
+			// Validate annotations on HTTPRoute and Gateway
+			existingIssuer := existing.Annotations[clusterIssuerAnnotation]
+			if existingIssuer != clusterIssuer {
+				return errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
+			}
+
+			// Validate IPAM zone and ip-family match if set
+			if existing.Spec.Infrastructure != nil && existing.Spec.Infrastructure.Annotations != nil {
+				if existingZone, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
+					if string(existingZone) != ipamZone {
+						return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
+					}
+				}
+				if existingFamily, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily]; exists {
+					if string(existingFamily) != ipFamily {
+						return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
+					}
+				}
+			}
+
+			return r.updateGatewayListeners(ctx, existing, gatewayNamespace)
+		}
 		log.Error(err, "Failed to create Gateway", "gateway", gatewayName)
 		return err
 	}

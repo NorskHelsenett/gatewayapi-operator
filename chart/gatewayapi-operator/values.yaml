@@ -73,7 +73,7 @@ prometheus:
 
 # [CERT-MANAGER]: To enable cert-manager injection to webhooks set true
 certmanager:
-  enable: false
+  enable: true
 
 # [NETWORK POLICIES]: To enable NetworkPolicies set true
 networkPolicy:
