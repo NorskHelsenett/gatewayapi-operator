@@ -198,9 +198,13 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	if len(newListeners) == 0 {
 		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayName, "namespace", gateway.Namespace)
 		if err := r.Delete(ctx, gateway); err != nil {
-			return err
+			if client.IgnoreNotFound(err) != nil {
+				return err
+			}
+			log.Info("Gateway already deleted (concurrent deletion)", "gateway", gatewayName)
+		} else {
+			log.Info("Deleted gateway", "gateway", gatewayName)
 		}
-		log.Info("Deleted gateway", "gateway", gatewayName)
 		return nil
 	}
 
