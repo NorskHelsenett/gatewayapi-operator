@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/controller"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -12,7 +13,7 @@ func ValidateZone(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) er
 
 	// If HTTPRoute zone is not set, lets default it to hnet-private like the IPAM-operator does
 	if httprouteZone == "" {
-		httprouteZone = "hnet-private"
+		httprouteZone = controller.DefaultIPAMZone
 	}
 
 	if !isHTTPRouteAndGatewayZoneMatching(httprouteZone, gateway) {

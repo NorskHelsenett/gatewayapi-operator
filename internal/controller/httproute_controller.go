@@ -191,7 +191,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Get IPAM zone from annotation or use default
 	ipamZone := httpRoute.Annotations[annotations.AnnotationIPAMZone]
 	if ipamZone == "" {
-		ipamZone = defaultIPAMZone
+		ipamZone = DefaultIPAMZone
 		log.Info("No IPAM zone annotation found, using default", "ipamZone", ipamZone)
 	}
 
