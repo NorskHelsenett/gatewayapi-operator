@@ -15,7 +15,7 @@ const (
 	clusterIssuerAnnotation = "cert-manager.io/cluster-issuer"
 
 	// defaultClusterIssuer is the default cert-manager cluster issuer
-	defaultClusterIssuer = "internpki"
+	DefaultClusterIssuer = "internpki"
 
 	// gatewayClassName is the Gateway API gateway class name
 	gatewayClassName = "eg"
