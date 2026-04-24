@@ -152,7 +152,7 @@ func TestValidateIssuer_DefaultIssuerMatchesGateway(t *testing.T) {
 	}
 }
 
-// ---- ValidateIpfamily ----
+// ---- ValidateIPFamily ----
 
 func TestValidateIpfamily_NoAnnotation(t *testing.T) {
 	// Route has no ip-family annotation -> skip validation entirely
@@ -160,14 +160,14 @@ func TestValidateIpfamily_NoAnnotation(t *testing.T) {
 	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
 		annotations.AnnotationIpFamily: "ipv6",
 	})
-	if err := validations.ValidateIpfamily(route, gw); err != nil {
+	if err := validations.ValidateIPFamily(route, gw); err != nil {
 		t.Errorf("expected nil error when route has no ip-family annotation, got %v", err)
 	}
 }
 
 func TestValidateIpfamily_NoGateway(t *testing.T) {
 	route := newHTTProute(map[string]string{annotations.AnnotationIpFamily: "dual"})
-	if err := validations.ValidateIpfamily(route, nil); err != nil {
+	if err := validations.ValidateIPFamily(route, nil); err != nil {
 		t.Errorf("expected nil error with no gateway, got %v", err)
 	}
 }
@@ -178,7 +178,7 @@ func TestValidateIpfamily_GatewayNoInfrastructure(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
 		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "eg"},
 	}
-	if err := validations.ValidateIpfamily(route, gw); err != nil {
+	if err := validations.ValidateIPFamily(route, gw); err != nil {
 		t.Errorf("expected nil error when gateway has no infrastructure, got %v", err)
 	}
 }
@@ -186,7 +186,7 @@ func TestValidateIpfamily_GatewayNoInfrastructure(t *testing.T) {
 func TestValidateIpfamily_GatewayNoIpFamilyAnnotation(t *testing.T) {
 	route := newHTTProute(map[string]string{annotations.AnnotationIpFamily: "dual"})
 	gw := newGatewayWithInfraAnn(nil)
-	if err := validations.ValidateIpfamily(route, gw); err != nil {
+	if err := validations.ValidateIPFamily(route, gw); err != nil {
 		t.Errorf("expected nil error when gateway has no ip-family annotation, got %v", err)
 	}
 }
@@ -196,7 +196,7 @@ func TestValidateIpfamily_Matching(t *testing.T) {
 	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
 		annotations.AnnotationIpFamily: "dual",
 	})
-	if err := validations.ValidateIpfamily(route, gw); err != nil {
+	if err := validations.ValidateIPFamily(route, gw); err != nil {
 		t.Errorf("expected nil error for matching ip-family, got %v", err)
 	}
 }
@@ -206,7 +206,7 @@ func TestValidateIpfamily_Mismatch(t *testing.T) {
 	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
 		annotations.AnnotationIpFamily: "dual",
 	})
-	if err := validations.ValidateIpfamily(route, gw); err == nil {
+	if err := validations.ValidateIPFamily(route, gw); err == nil {
 		t.Error("expected error for ip-family mismatch, got nil")
 	}
 }

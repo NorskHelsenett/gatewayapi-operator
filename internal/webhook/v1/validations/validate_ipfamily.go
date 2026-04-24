@@ -7,7 +7,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func ValidateIpfamily(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
+func ValidateIPFamily(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteIpFamily := httproute.GetAnnotations()[annotations.AnnotationIpFamily]
 
 	// If HTTPRoute ip-family is not set, skip validation
