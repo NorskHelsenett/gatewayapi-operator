@@ -15,7 +15,7 @@ func ValidateIpfamily(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway
 		return nil
 	}
 
-	if !isHttprouteAndGatewayIpFamilyMatching(httprouteIpFamily, gateway) {
+	if !isHTTPRouteAndGatewayIPFamilyMatching(httprouteIpFamily, gateway) {
 		gatewayIpFamily := string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily])
 		return fmt.Errorf("HTTPRoute %s annotation %q conflicts with existing Gateway %s/%s (has %q)",
 			annotations.AnnotationIpFamily, httprouteIpFamily, gateway.Namespace, gateway.Name, gatewayIpFamily)
@@ -25,7 +25,7 @@ func ValidateIpfamily(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway
 
 }
 
-func isHttprouteAndGatewayIpFamilyMatching(httprouteIpFamily string, gateway *gatewayv1.Gateway) bool {
+func isHTTPRouteAndGatewayIPFamilyMatching(httprouteIpFamily string, gateway *gatewayv1.Gateway) bool {
 	if gateway == nil {
 		return true
 	}

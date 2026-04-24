@@ -15,7 +15,7 @@ func ValidateIssuer(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) 
 		httprouteIssuer = "internpki"
 	}
 
-	if !isHttprouteAndGatewayIssuerMatching(httprouteIssuer, gateway) {
+	if !isHTTPRouteAndGatewayIssuerMatching(httprouteIssuer, gateway) {
 		gatewayIssuer := gateway.ObjectMeta.Annotations[annotations.AnnotationCertManagerClusterIssuer]
 		return fmt.Errorf("HTTPRoute %s annotation %q conflicts with existing Gateway %s/%s (has %q)",
 			annotations.AnnotationClusterIssuer, httprouteIssuer, gateway.Namespace, gateway.Name, gatewayIssuer)
@@ -25,7 +25,7 @@ func ValidateIssuer(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) 
 
 }
 
-func isHttprouteAndGatewayIssuerMatching(httprouteIssuer string, gateway *gatewayv1.Gateway) bool {
+func isHTTPRouteAndGatewayIssuerMatching(httprouteIssuer string, gateway *gatewayv1.Gateway) bool {
 	if gateway == nil {
 		return true
 	}
