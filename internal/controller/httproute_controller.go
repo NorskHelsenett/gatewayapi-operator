@@ -198,10 +198,10 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Get ip-family from HTTProute or use the appropriate default for zone
 	ipFamily := httpRoute.Annotations[annotations.AnnotationIpFamily]
 	if ipFamily == "" {
-		if ipamZone == inetIPAMZone {
-			ipFamily = defaultInetIpFamily
+		if ipamZone == InetIPAMZone {
+			ipFamily = DefaultInetIpFamily
 		} else {
-			ipFamily = defaultHnetIpFamily
+			ipFamily = DefaultHnetIpFamily
 		}
 		log.V(1).Info("No ip-family annotation found, using default for zone", "ipFamily", ipFamily, "ipamZone", ipamZone)
 	}

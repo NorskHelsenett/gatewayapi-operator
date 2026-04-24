@@ -4,15 +4,21 @@ import (
 	"fmt"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/controller"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func ValidateIPFamily(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteIpFamily := httproute.GetAnnotations()[annotations.AnnotationIpFamily]
+	ipamZone := httproute.GetAnnotations()[annotations.AnnotationIPAMZone]
 
-	// If HTTPRoute ip-family is not set, skip validation
+	// if httprouteIpFamily is unset default it to the appropriate zone default
 	if httprouteIpFamily == "" {
-		return nil
+		if ipamZone == controller.InetIPAMZone {
+			httprouteIpFamily = controller.DefaultInetIpFamily
+		} else {
+			httprouteIpFamily = controller.DefaultHnetIpFamily
+		}
 	}
 
 	if !isHTTPRouteAndGatewayIPFamilyMatching(httprouteIpFamily, gateway) {
