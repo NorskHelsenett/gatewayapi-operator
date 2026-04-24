@@ -6,9 +6,30 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: selfsigned-issuer
-    namespace: {{ .Values.namespace }}
+  namespace: {{ .Values.namespace }}
 spec:
   selfSigned: {}
+---
+# Certificate for the webhook server
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  annotations:
+    {{- if .Values.crd.keep }}
+    "helm.sh/resource-policy": keep
+    {{- end }}
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: serving-cert
+  namespace: {{ .Values.namespace }}
+spec:
+  dnsNames:
+    - gatewayapi-operator-webhook-service.{{ .Values.namespace }}.svc
+    - gatewayapi-operator-webhook-service.{{ .Values.namespace }}.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: webhook-server-cert
 {{- if .Values.metrics.enable }}
 ---
 # Certificate for the metrics
@@ -22,7 +43,7 @@ metadata:
   labels:
     {{- include "chart.labels" . | nindent 4 }}
   name: metrics-certs
-    namespace: {{ .Values.namespace }}
+  namespace: {{ .Values.namespace }}
 spec:
   dnsNames:
     - gatewayapi-operator.{{ .Release.Namespace }}.svc

@@ -48,7 +48,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		}
 		// Filter out all httproutes that are not enabled for this operator
 
-		if route.Annotations[AnnotationUseHttprouteOperator] != "true" {
+		if route.Annotations[annotations.AnnotationUseHttprouteOperator] != "true" {
 			skippedCount++
 			continue
 		}
@@ -66,7 +66,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 				// Collect all hostnames from this route
 				for _, hostname := range route.Spec.Hostnames {
 					// Add all httproutes that should be created on port 80 without TLS (redirect)
-					if route.Annotations[AnnotationHttpOnlyListener] == "true" {
+					if route.Annotations[annotations.AnnotationHttpOnlyListener] == "true" {
 						httpHostnameSet[string(hostname)] = true
 					} else {
 						// Add all TLS 443 http(s)routes
@@ -89,20 +89,14 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	}
 
 	// Create HTTPS listeners for all collected hostnames
-	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet)+len(httpHostnameSet))
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
 	for hostname := range hostnameSet {
-		httpsListener := r.createHTTPSListener(hostname, gatewayNamespace)
-		log.Info("Created HTTPS listener", "name", httpsListener.Name, "hostname", hostname)
-		listeners = append(listeners, httpsListener)
-
+		listeners = append(listeners, r.createHTTPSListener(hostname, gatewayNamespace))
 	}
 
 	for httpHostname := range httpHostnameSet {
-		httpListener := r.createHTTPListener(httpHostname)
-		log.Info("Created HTTP listener", "name", httpListener.Name, "hostname", httpHostname)
-		listeners = append(listeners, httpListener)
+		listeners = append(listeners, r.createHTTPListener(httpHostname))
 	}
 
 	log.Info("Collected listeners for Gateway",
@@ -198,13 +192,16 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	if len(newListeners) == 0 {
 		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayName, "namespace", gateway.Namespace)
 		if err := r.Delete(ctx, gateway); err != nil {
-			return err
+			if client.IgnoreNotFound(err) != nil {
+				return err
+			}
+			log.Info("Gateway already deleted (concurrent deletion)", "gateway", gatewayName)
+		} else {
+			log.Info("Deleted gateway", "gateway", gatewayName)
 		}
-		log.Info("Deleted gateway", "gateway", gatewayName)
 		return nil
 	}
 
-	log.Info("Applying Gateway patch", "listeners", len(newListeners))
 	namespacedName := &types.NamespacedName{
 		Namespace: gatewayNamespace,
 		Name:      gatewayName,

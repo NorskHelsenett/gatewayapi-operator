@@ -37,6 +37,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/controller"
+	webhookv1 "github.com/NorskHelsenett/gatewayapi-operator/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -184,6 +185,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookv1.SetupHTTPRouteWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "HTTPRoute")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
