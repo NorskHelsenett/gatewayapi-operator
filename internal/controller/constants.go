@@ -30,7 +30,7 @@ const (
 	tlsCertSuffix = "-tls"
 
 	// defaultIPAMZone is the default IPAM zone if not specified
-	defaultIPAMZone = "hnet-private"
+	DefaultIPAMZone = "hnet-private"
 
 	inetIPAMZone = "inet"
 
