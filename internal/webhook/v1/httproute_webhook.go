@@ -39,7 +39,7 @@ func SetupHTTPRouteWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/gatewayapi-operator-httproute-validator,mutating=false,failurePolicy=fail,sideEffects=None,groups=gateway.networking.k8s.io,resources=httproutes,verbs=create;update,versions=v1,name=vhttproute-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/gatewayapi-operator-httproute-validator,mutating=false,failurePolicy=ignore,sideEffects=None,groups=gateway.networking.k8s.io,resources=httproutes,verbs=create;update,versions=v1,name=vhttproute-v1.kb.io,admissionReviewVersions=v1
 
 // HTTPRouteCustomValidator struct is responsible for validating the HTTPRoute resource
 // when it is created, updated, or deleted.
