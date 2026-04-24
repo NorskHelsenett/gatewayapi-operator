@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/controller"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -12,7 +13,7 @@ func ValidateIssuer(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) 
 
 	// If HTTPRoute issuer is not set, default to "internpki" and continue validation
 	if httprouteIssuer == "" {
-		httprouteIssuer = "internpki"
+		httprouteIssuer = controller.DefaultClusterIssuer
 	}
 
 	if !isHTTPRouteAndGatewayIssuerMatching(httprouteIssuer, gateway) {
