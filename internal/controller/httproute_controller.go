@@ -203,7 +203,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		} else {
 			ipFamily = defaultHnetIpFamily
 		}
-		log.Info("No ip-family annotation found, using default for zone", "ipFamily", ipamZone)
+		log.Info("No ip-family annotation found, using default for zone", "ipFamily", ipFamily, "ipamZone", ipamZone)
 	}
 	// Get cluster issuer from annotation or use default
 	clusterIssuer := httpRoute.Annotations[annotations.AnnotationClusterIssuer]
