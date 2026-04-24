@@ -44,11 +44,16 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		return errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
 	}
 
-	// Gateway exists, validate IPAM zone matches if set
+	// Gateway exists, validate IPAM zone and ip-family match if set
 	if gateway.Spec.Infrastructure != nil && gateway.Spec.Infrastructure.Annotations != nil {
 		if existingZone, exists := gateway.Spec.Infrastructure.Annotations["ipam.vitistack.io/zone"]; exists {
 			if string(existingZone) != ipamZone {
 				return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
+			}
+		}
+		if existingFamily, exists := gateway.Spec.Infrastructure.Annotations["ipam.vitistack.io/ip-family"]; exists {
+			if string(existingFamily) != ipFamily {
+				return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 			}
 		}
 	}
@@ -112,11 +117,16 @@ func (r *HTTPRouteReconciler) createGateway(
 				return errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
 			}
 
-			// Validate IPAM zone matches if set
+			// Validate IPAM zone and ip-family match if set
 			if existing.Spec.Infrastructure != nil && existing.Spec.Infrastructure.Annotations != nil {
 				if existingZone, exists := existing.Spec.Infrastructure.Annotations["ipam.vitistack.io/zone"]; exists {
 					if string(existingZone) != ipamZone {
 						return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
+					}
+				}
+				if existingFamily, exists := existing.Spec.Infrastructure.Annotations["ipam.vitistack.io/ip-family"]; exists {
+					if string(existingFamily) != ipFamily {
+						return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 					}
 				}
 			}
