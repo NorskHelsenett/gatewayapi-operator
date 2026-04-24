@@ -208,7 +208,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Get cluster issuer from annotation or use default
 	clusterIssuer := httpRoute.Annotations[annotations.AnnotationClusterIssuer]
 	if clusterIssuer == "" {
-		clusterIssuer = defaultClusterIssuer
+		clusterIssuer = DefaultClusterIssuer
 		log.Info("No cluster issuer annotation found, using default", "clusterIssuer", clusterIssuer)
 	}
 
