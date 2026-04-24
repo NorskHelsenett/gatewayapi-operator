@@ -14,7 +14,7 @@ const (
 	// clusterIssuerAnnotation specifies the cert-manager cluster issuer
 	clusterIssuerAnnotation = "cert-manager.io/cluster-issuer"
 
-	// defaultClusterIssuer is the default cert-manager cluster issuer
+	// DefaultClusterIssuer is the default cert-manager cluster issuer
 	DefaultClusterIssuer = "internpki"
 
 	// gatewayClassName is the Gateway API gateway class name
@@ -29,7 +29,7 @@ const (
 	// tlsCertSuffix is the suffix for TLS certificate secret names
 	tlsCertSuffix = "-tls"
 
-	// defaultIPAMZone is the default IPAM zone if not specified
+	// DefaultIPAMZone is the default IPAM zone if not specified
 	DefaultIPAMZone = "hnet-private"
 
 	inetIPAMZone = "inet"
