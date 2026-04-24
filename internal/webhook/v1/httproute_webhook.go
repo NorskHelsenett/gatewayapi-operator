@@ -79,7 +79,7 @@ func (v *HTTPRouteCustomValidator) ValidateCreate(ctx context.Context, httproute
 	}
 
 	// Validate that ip-family is the same on HTTPRoute and Gateway
-	err = validations.ValidateIpfamily(httproute, referredGateway)
+	err = validations.ValidateIPFamily(httproute, referredGateway)
 
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, _, httpro
 	}
 
 	// Validate that ip-family is the same on HTTPRoute and Gateway
-	err = validations.ValidateIpfamily(httproute, referredGateway)
+	err = validations.ValidateIPFamily(httproute, referredGateway)
 
 	if err != nil {
 		return nil, err
