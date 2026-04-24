@@ -102,6 +102,16 @@ func (r *HTTPRouteReconciler) createGateway(
 	UpdateGatewayAnnotations(ctx, newGateway, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
 	if err := r.Create(ctx, newGateway); err != nil {
+		if errors.IsAlreadyExists(err) {
+			// Another reconcile created the gateway concurrently; fetch and update it instead
+			log.Info("Gateway already exists (concurrent create), updating listeners", "gateway", gatewayName)
+			existing := &gatewayv1.Gateway{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, existing); getErr != nil {
+				log.Error(getErr, "Failed to get Gateway after concurrent create", "gateway", gatewayName)
+				return getErr
+			}
+			return r.updateGatewayListeners(ctx, existing, gatewayNamespace)
+		}
 		log.Error(err, "Failed to create Gateway", "gateway", gatewayName)
 		return err
 	}
