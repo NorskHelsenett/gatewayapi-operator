@@ -62,10 +62,13 @@ func (v *HTTPRouteCustomValidator) ValidateCreate(ctx context.Context, httproute
 	ctx = logf.IntoContext(ctx, httproutelog)
 
 	// First fetch gateway if it already exists
-	referredGateway := v.GetReferredGateway(ctx, httproute)
+	referredGateway, err := v.GetReferredGateway(ctx, httproute)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate that IPAM Zone is identical on HTTPRoute and Gateway
-	err := validations.ValidateZone(httproute, referredGateway)
+	err = validations.ValidateZone(httproute, referredGateway)
 
 	if err != nil {
 		return nil, err
@@ -100,10 +103,13 @@ func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, _, httpro
 	httproutelog.Info("Validation for HTTPRoute upon update", "name", httproute.GetName())
 	ctx = logf.IntoContext(ctx, httproutelog)
 
-	referredGateway := v.GetReferredGateway(ctx, httproute)
+	referredGateway, err := v.GetReferredGateway(ctx, httproute)
+	if err != nil {
+		return nil, err
+	}
 
 	// Validate that IPAM Zone is identical on HTTPRoute and Gateway
-	err := validations.ValidateZone(httproute, referredGateway)
+	err = validations.ValidateZone(httproute, referredGateway)
 
 	if err != nil {
 		return nil, err
