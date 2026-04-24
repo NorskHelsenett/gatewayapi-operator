@@ -32,11 +32,11 @@ const (
 	// DefaultIPAMZone is the default IPAM zone if not specified
 	DefaultIPAMZone = "hnet-private"
 
-	inetIPAMZone = "inet"
+	InetIPAMZone = "inet"
 
-	defaultInetIpFamily = "dual"
+	DefaultInetIpFamily = "dual"
 
-	defaultHnetIpFamily = "ipv4"
+	DefaultHnetIpFamily = "ipv4"
 )
 
 // ptr returns a pointer to the provided string
