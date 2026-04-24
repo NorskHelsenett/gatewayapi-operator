@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,12 +47,12 @@ func (r *HTTPRouteReconciler) ensureGateway(
 
 	// Gateway exists, validate IPAM zone and ip-family match if set
 	if gateway.Spec.Infrastructure != nil && gateway.Spec.Infrastructure.Annotations != nil {
-		if existingZone, exists := gateway.Spec.Infrastructure.Annotations["ipam.vitistack.io/zone"]; exists {
+		if existingZone, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
 			if string(existingZone) != ipamZone {
 				return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
 			}
 		}
-		if existingFamily, exists := gateway.Spec.Infrastructure.Annotations["ipam.vitistack.io/ip-family"]; exists {
+		if existingFamily, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily]; exists {
 			if string(existingFamily) != ipFamily {
 				return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 			}
@@ -119,12 +120,12 @@ func (r *HTTPRouteReconciler) createGateway(
 
 			// Validate IPAM zone and ip-family match if set
 			if existing.Spec.Infrastructure != nil && existing.Spec.Infrastructure.Annotations != nil {
-				if existingZone, exists := existing.Spec.Infrastructure.Annotations["ipam.vitistack.io/zone"]; exists {
+				if existingZone, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
 					if string(existingZone) != ipamZone {
 						return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
 					}
 				}
-				if existingFamily, exists := existing.Spec.Infrastructure.Annotations["ipam.vitistack.io/ip-family"]; exists {
+				if existingFamily, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily]; exists {
 					if string(existingFamily) != ipFamily {
 						return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 					}
