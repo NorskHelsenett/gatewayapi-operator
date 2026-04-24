@@ -3,13 +3,14 @@ package v1
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func (v *HTTPRouteCustomValidator) GetReferredGateway(ctx context.Context, httproute *gatewayv1.HTTPRoute) *gatewayv1.Gateway {
+func (v *HTTPRouteCustomValidator) GetReferredGateway(ctx context.Context, httproute *gatewayv1.HTTPRoute) (*gatewayv1.Gateway, error) {
 	log := logf.FromContext(ctx)
 
 	for _, parentRef := range httproute.Spec.ParentRefs {
@@ -33,12 +34,16 @@ func (v *HTTPRouteCustomValidator) GetReferredGateway(ctx context.Context, httpr
 			Namespace: namespace,
 		}, gateway)
 		if err != nil {
-			log.Info("Gateway not found for HTTPRoute", "gateway", parentRef.Name, "namespace", namespace)
-			continue
+			if apierrors.IsNotFound(err) {
+				log.Info("Gateway not found for HTTPRoute", "gateway", parentRef.Name, "namespace", namespace)
+				continue
+			}
+			log.Error(err, "Failed to fetch Gateway for HTTPRoute", "gateway", parentRef.Name, "namespace", namespace)
+			return nil, err
 		}
 
-		return gateway
+		return gateway, nil
 	}
 
-	return nil
+	return nil, nil
 }
