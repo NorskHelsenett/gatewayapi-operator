@@ -69,22 +69,22 @@ func (v *HTTPRouteCustomValidator) ValidateCreate(ctx context.Context, httproute
 
 	// Validate that IPAM Zone is identical on HTTPRoute and Gateway
 	err = validations.ValidateZone(httproute, referredGateway)
-
 	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute creation", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
 	}
 
 	// Validate that Issuer is identical on HTTPRoute and Gateway
 	err = validations.ValidateIssuer(httproute, referredGateway)
-
 	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute creation", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
 	}
 
 	// Validate that ip-family is the same on HTTPRoute and Gateway
 	err = validations.ValidateIPFamily(httproute, referredGateway)
-
 	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute creation", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
 	}
 
@@ -110,22 +110,22 @@ func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, _, httpro
 
 	// Validate that IPAM Zone is identical on HTTPRoute and Gateway
 	err = validations.ValidateZone(httproute, referredGateway)
-
 	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute update", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
 	}
 
 	// Validate that Issuer is identical on HTTPRoute and Gateway
 	err = validations.ValidateIssuer(httproute, referredGateway)
-
 	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute update", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
 	}
 
 	// Validate that ip-family is the same on HTTPRoute and Gateway
 	err = validations.ValidateIPFamily(httproute, referredGateway)
-
 	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute update", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
 	}
 
