@@ -89,20 +89,14 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	}
 
 	// Create HTTPS listeners for all collected hostnames
-	log.Info("Creating listeners from hostnames", "uniqueHostnames", len(hostnameSet)+len(httpHostnameSet))
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
 	for hostname := range hostnameSet {
-		httpsListener := r.createHTTPSListener(hostname, gatewayNamespace)
-		log.Info("Created HTTPS listener", "name", httpsListener.Name, "hostname", hostname)
-		listeners = append(listeners, httpsListener)
-
+		listeners = append(listeners, r.createHTTPSListener(hostname, gatewayNamespace))
 	}
 
 	for httpHostname := range httpHostnameSet {
-		httpListener := r.createHTTPListener(httpHostname)
-		log.Info("Created HTTP listener", "name", httpListener.Name, "hostname", httpHostname)
-		listeners = append(listeners, httpListener)
+		listeners = append(listeners, r.createHTTPListener(httpHostname))
 	}
 
 	log.Info("Collected listeners for Gateway",
@@ -208,7 +202,6 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		return nil
 	}
 
-	log.Info("Applying Gateway patch", "listeners", len(newListeners))
 	namespacedName := &types.NamespacedName{
 		Namespace: gatewayNamespace,
 		Name:      gatewayName,
