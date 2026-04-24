@@ -42,7 +42,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Skip if operator is not enabled for this HTTPRoute
 	if httpRoute.Annotations[annotations.AnnotationUseHttprouteOperator] != "true" {
-		log.Info("Skipping HTTPRoute - operator not enabled", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
+		log.V(1).Info("Skipping HTTPRoute - operator not enabled", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
 		return ctrl.Result{}, nil
 	}
 
@@ -52,7 +52,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	log.Info("Reconciling HTTPRoute", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
+	log.V(1).Info("Reconciling HTTPRoute", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
 
 	// Extract gateway information from first parent ref
 	// TODO: Support multiple parent refs in the future
@@ -192,7 +192,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	ipamZone := httpRoute.Annotations[annotations.AnnotationIPAMZone]
 	if ipamZone == "" {
 		ipamZone = DefaultIPAMZone
-		log.Info("No IPAM zone annotation found, using default", "ipamZone", ipamZone)
+		log.V(1).Info("No IPAM zone annotation found, using default", "ipamZone", ipamZone)
 	}
 
 	// Get ip-family from HTTProute or use the appropriate default for zone
@@ -203,18 +203,17 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		} else {
 			ipFamily = defaultHnetIpFamily
 		}
-		log.Info("No ip-family annotation found, using default for zone", "ipFamily", ipFamily, "ipamZone", ipamZone)
+		log.V(1).Info("No ip-family annotation found, using default for zone", "ipFamily", ipFamily, "ipamZone", ipamZone)
 	}
 	// Get cluster issuer from annotation or use default
 	clusterIssuer := httpRoute.Annotations[annotations.AnnotationClusterIssuer]
 	if clusterIssuer == "" {
 		clusterIssuer = DefaultClusterIssuer
-		log.Info("No cluster issuer annotation found, using default", "clusterIssuer", clusterIssuer)
+		log.V(1).Info("No cluster issuer annotation found, using default", "clusterIssuer", clusterIssuer)
 	}
 
 	// Ensure the Gateway exists and has correct listeners
 	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
-		log.Error(err, "Failed to ensure Gateway")
 		return ctrl.Result{}, err
 	}
 
