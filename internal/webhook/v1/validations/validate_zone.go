@@ -15,7 +15,7 @@ func ValidateZone(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) er
 		httprouteZone = "hnet-private"
 	}
 
-	if !isHttprouteAndGatewayZoneMatching(httprouteZone, gateway) {
+	if !isHTTPRouteAndGatewayZoneMatching(httprouteZone, gateway) {
 		gatewayZone := string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone])
 		return fmt.Errorf("HTTPRoute %s annotation %q conflicts with existing Gateway %s/%s (has %q)",
 			annotations.AnnotationIPAMZone, httprouteZone, gateway.Namespace, gateway.Name, gatewayZone)
@@ -25,7 +25,7 @@ func ValidateZone(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) er
 
 }
 
-func isHttprouteAndGatewayZoneMatching(httprouteZone string, gateway *gatewayv1.Gateway) bool {
+func isHTTPRouteAndGatewayZoneMatching(httprouteZone string, gateway *gatewayv1.Gateway) bool {
 	if gateway == nil {
 		return true
 	}
