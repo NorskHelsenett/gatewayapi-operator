@@ -155,13 +155,13 @@ func TestValidateIssuer_DefaultIssuerMatchesGateway(t *testing.T) {
 // ---- ValidateIPFamily ----
 
 func TestValidateIpfamily_NoAnnotation(t *testing.T) {
-	// Route has no ip-family annotation -> skip validation entirely
+	// Route has no ip-family annotation -> defaults to ipv4 (hnet zone); gateway has ipv6 -> conflict
 	route := newHTTProute(nil)
 	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
 		annotations.AnnotationIpFamily: "ipv6",
 	})
-	if err := validations.ValidateIPFamily(route, gw); err != nil {
-		t.Errorf("expected nil error when route has no ip-family annotation, got %v", err)
+	if err := validations.ValidateIPFamily(route, gw); err == nil {
+		t.Error("expected error when route defaults to ipv4 but gateway has ipv6, got nil")
 	}
 }
 
