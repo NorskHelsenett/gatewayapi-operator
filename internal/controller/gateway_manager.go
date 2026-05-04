@@ -90,18 +90,19 @@ func (r *HTTPRouteReconciler) createGateway(
 			},
 		},
 		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: gatewayClassName,
-			Listeners:        listeners,
+			Listeners: listeners,
 			Infrastructure: &gatewayv1.GatewayInfrastructure{
 				Annotations: map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
-					"ipam.vitistack.io/zone":      gatewayv1.AnnotationValue(ipamZone),
-					"ipam.vitistack.io/ip-family": gatewayv1.AnnotationValue(ipFamily),
+					annotations.AnnotationIPAMZone: gatewayv1.AnnotationValue(ipamZone),
+					annotations.AnnotationIpFamily: gatewayv1.AnnotationValue(ipFamily),
 				},
 			},
 		},
 	}
 
 	UpdateGatewayAnnotations(ctx, newGateway, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
+
+	UpdateGatewayClass(newGateway)
 
 	if err := r.Create(ctx, newGateway); err != nil {
 		if errors.IsAlreadyExists(err) {
