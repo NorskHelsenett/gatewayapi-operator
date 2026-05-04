@@ -219,10 +219,10 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
 
-		// Update the gateways annotations
+		// Update the gateway's annotations
 		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
-		// Update the gateways gatewayclass
+		// Update the gateway's GatewayClass
 		UpdateGatewayClass(&latest)
 
 		return r.Update(ctx, &latest)
