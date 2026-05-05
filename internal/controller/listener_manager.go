@@ -219,8 +219,11 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
 
-		// Update the gateway
+		// Update the gateway's annotations
 		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
+
+		// Update the gateway's GatewayClass
+		UpdateGatewayClass(&latest)
 
 		return r.Update(ctx, &latest)
 	})
@@ -274,4 +277,19 @@ func UpdateGatewayAnnotations(ctx context.Context, gw *gatewayv1.Gateway, ignore
 		delete(gw.ObjectMeta.Annotations, annotations.AnnotationOverrideTTL)
 	}
 
+}
+
+func UpdateGatewayClass(gw *gatewayv1.Gateway) {
+	// only update GatewayClass when no Class is set or when old default "eg" is used.
+	if gw.Spec.GatewayClassName == "" || gw.Spec.GatewayClassName == legacyGatewayClassName {
+		// If gateway is in InetIPAMZone we use the Inet GatewayClass
+		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.Annotations != nil &&
+			gw.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone] == InetIPAMZone {
+			gw.Spec.GatewayClassName = gatewayv1.ObjectName(inetGatewayClassName)
+		} else {
+			// Use Hnet gatewayclass if AnnotationIPAMZone is not InetIPAMZone
+			gw.Spec.GatewayClassName = gatewayv1.ObjectName(hnetGatewayClassName)
+
+		}
+	}
 }
