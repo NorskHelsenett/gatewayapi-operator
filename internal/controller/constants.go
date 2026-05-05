@@ -17,8 +17,14 @@ const (
 	// DefaultClusterIssuer is the default cert-manager cluster issuer
 	DefaultClusterIssuer = "internpki"
 
-	// gatewayClassName is the Gateway API gateway class name
-	gatewayClassName = "eg"
+	// Legacy gateway class
+	legacyGatewayClassName = "eg"
+
+	// Healthnet gateway class
+	hnetGatewayClassName = "eg-hnet"
+
+	// Internet gateway class
+	inetGatewayClassName = "eg-inet"
 
 	// httpsPort is the default HTTPS port
 	httpsPort = 443
