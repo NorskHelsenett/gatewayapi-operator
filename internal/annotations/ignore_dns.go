@@ -16,7 +16,7 @@ func (m *IgnoreDnsUpdates) ConvertToGatewayAnnotation() string {
 }
 
 func (m *IgnoreDnsUpdates) ParseAnnotation(fqdn string, annotation string) error {
-	// Check if someone misspelled "true" or if it is not set
+	// Normalize annotation value and only accept "all" or "true".
 	normalizedValue := strings.ToLower(strings.TrimSpace(annotation))
 	// The dns.nhn.no/ignore annotations value was originally just "all" but due to a miscommunication in docs on docs.nhn.no we also have to support "true".
 	// This is implemented the same way in gatewayapi-operator and HTTPRoutes. Both "all" and "true" are supported.
