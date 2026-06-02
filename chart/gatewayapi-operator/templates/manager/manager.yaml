@@ -40,11 +40,15 @@ spec:
           {{- if .Values.controllerManager.container.imagePullPolicy }}
           imagePullPolicy: {{ .Values.controllerManager.container.imagePullPolicy }}
           {{- end }}
-          {{- if or (not .Values.certmanager.enable) .Values.controllerManager.container.env }}
+          {{- if or (not .Values.certmanager.enable) .Values.clienttrafficpolicy.pqc.enable .Values.controllerManager.container.env }}
           env:
             {{- if not .Values.certmanager.enable }}
             - name: ENABLE_WEBHOOKS
               value: "false"
+            {{- end }}
+            {{- if .Values.clienttrafficpolicy.pqc.enable }}
+            - name: ENABLE_CLIENTTRAFFICPOLICY_PQC
+              value: "true"
             {{- end }}
             {{- if .Values.controllerManager.container.env }}
             {{- range $key, $value := .Values.controllerManager.container.env }}
