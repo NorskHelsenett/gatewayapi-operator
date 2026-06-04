@@ -36,9 +36,9 @@ rules:
   - update
 - apiGroups:
   - gateway.envoyproxy.io
-resources:
+  resources:
   - clienttrafficpolicies
-verbs:
+  verbs:
   - create
   - delete
   - get

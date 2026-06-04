@@ -188,7 +188,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		return err
 	}
 
-	// If no listeners remain, delete the gateway
+	// If no listeners remain, delete the gateway and any associated CTP
 	if len(newListeners) == 0 {
 		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayName, "namespace", gateway.Namespace)
 		if err := r.Delete(ctx, gateway); err != nil {
@@ -198,6 +198,9 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 			log.Info("Gateway already deleted (concurrent deletion)", "gateway", gatewayName)
 		} else {
 			log.Info("Deleted gateway", "gateway", gatewayName)
+		}
+		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
+			log.Error(err, "Failed to delete ClientTrafficPolicy for gateway", "gateway", gatewayName)
 		}
 		return nil
 	}

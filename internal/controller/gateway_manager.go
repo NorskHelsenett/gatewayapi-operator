@@ -33,7 +33,10 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		if errors.IsNotFound(err) {
 			// Gateway doesn't exist, create it
 			log.Info("Creating new Gateway", "gateway", gatewayName, "namespace", gatewayNamespace)
-			return r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer)
+			if err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
+				return err
+			}
+			return r.ensureClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
 		}
 		log.Error(err, "Failed to get Gateway", "gateway", gatewayName)
 		return err
@@ -61,7 +64,10 @@ func (r *HTTPRouteReconciler) ensureGateway(
 
 	// Gateway exists and configuration matches, update listeners
 	log.V(1).Info("Gateway exists, updating listeners", "gateway", gatewayName, "namespace", gatewayNamespace)
-	return r.updateGatewayListeners(ctx, gateway, gatewayNamespace)
+	if err := r.updateGatewayListeners(ctx, gateway, gatewayNamespace); err != nil {
+		return err
+	}
+	return r.ensureClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
 }
 
 // createGateway creates a new Gateway resource with initial configuration
