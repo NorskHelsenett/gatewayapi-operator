@@ -23,7 +23,9 @@ var clientTrafficPolicyPQCECDHCurves = []string{
 }
 
 // ctpEnabled reports whether ClientTrafficPolicy creation is enabled via the
-// ENABLE_CLIENTTRAFFICPOLICY_PQC environment variable.
+// ENABLE_CLIENTTRAFFICPOLICY_PQC environment variable. CTP management is
+// disabled only when the variable is explicitly set to "false"; unset (the
+// default) or any other value is treated as enabled.
 func ctpEnabled() bool {
 	return os.Getenv(enableClientTrafficPolicyPQCEnvVar) != "false"
 }
@@ -33,11 +35,11 @@ func ctpEnabled() bool {
 // When ENABLE_CLIENTTRAFFICPOLICY_PQC=true the CTP is created/updated with the
 // configured PQC ECDH curves.
 //
-// When the flag is false (or unset) any previously-created CTP is deleted so
-// that disabling the flag is sufficient to clean up all operator-managed CTPs.
-// This makes the removal path easy: flip the env var, and every gateway
-// reconcile will delete its CTP. The function is safe to call on clusters that
-// do not have the ClientTrafficPolicy CRD installed.
+// When the flag is explicitly set to "false" any previously-created CTP is
+// deleted so that disabling the flag is sufficient to clean up all
+// operator-managed CTPs. This makes the removal path easy: flip the env var,
+// and every gateway reconcile will delete its CTP. The function is safe to
+// call on clusters that do not have the ClientTrafficPolicy CRD installed.
 func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
