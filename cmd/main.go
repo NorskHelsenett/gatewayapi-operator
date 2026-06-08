@@ -50,7 +50,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
-	if os.Getenv("ENABLE_CLIENTTRAFFICPOLICY_PQC") == "true" {
+	if os.Getenv("ENABLE_CLIENTTRAFFICPOLICY_PQC") != "false" {
 		utilruntime.Must(egv1a1.AddToScheme(scheme))
 	}
 
