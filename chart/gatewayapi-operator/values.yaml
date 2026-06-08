@@ -80,4 +80,5 @@ networkPolicy:
   enable: false
 
 # [PQC]: Enables post quantum cryptography via the ClientTrafficPolicy Envoy CRD
-pqc: true
+envoy:
+  pqc: true
