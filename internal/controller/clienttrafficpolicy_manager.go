@@ -33,8 +33,8 @@ func ctpEnabled() bool {
 
 // ensureClientTrafficPolicy reconciles the ClientTrafficPolicy for the given Gateway.
 //
-// When ENABLE_CLIENTTRAFFICPOLICY_PQC=true the CTP is created/updated with the
-// configured PQC ECDH curves.
+// When ENABLE_CLIENTTRAFFICPOLICY_PQC is unset or set to any value other than "false",
+// the CTP is created/updated with the configured PQC ECDH curves.
 //
 // When the flag is explicitly set to "false" any previously-created CTP is
 // deleted so that disabling the flag is sufficient to clean up all
