@@ -25,7 +25,7 @@ var clientTrafficPolicyPQCECDHCurves = []string{
 // ctpEnabled reports whether ClientTrafficPolicy creation is enabled via the
 // ENABLE_CLIENTTRAFFICPOLICY_PQC environment variable.
 func ctpEnabled() bool {
-	return os.Getenv(enableClientTrafficPolicyPQCEnvVar) == "true"
+	return os.Getenv(enableClientTrafficPolicyPQCEnvVar) != "false"
 }
 
 // ensureClientTrafficPolicy reconciles the ClientTrafficPolicy for the given Gateway.
