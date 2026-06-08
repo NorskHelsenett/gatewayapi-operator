@@ -57,6 +57,11 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 	// This lets Kubernetes GC delete the CTP automatically when the Gateway is removed.
 	gateway := &gwapiv1.Gateway{}
 	if err := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, gateway); err != nil {
+		if errors.IsNotFound(err) {
+			// Gateway disappeared (e.g. deleted due to no remaining listeners). Ensure we don't
+			// leave an operator-managed CTP behind, and don't fail reconciliation.
+			return r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
+		}
 		log.Error(err, "Failed to get Gateway for OwnerReference", "gateway", gatewayName)
 		return err
 	}
