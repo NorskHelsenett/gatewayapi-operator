@@ -79,7 +79,5 @@ certmanager:
 networkPolicy:
   enable: false
 
-clienttrafficpolicy:
-  # Enables post quantum cryptography via the ClientTrafficPolicy Envoy CRD
-  pqc:
-    enable: true
+# [PQC]: Enables post quantum cryptography via the ClientTrafficPolicy Envoy CRD
+pqc: true
