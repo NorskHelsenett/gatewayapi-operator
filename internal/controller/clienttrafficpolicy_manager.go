@@ -105,8 +105,10 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		return nil
 	}
 
-	// Already exists – update only if ECDH curves differ to avoid unnecessary writes.
-	if existing.Spec.TLS != nil && stringSlicesEqual(existing.Spec.TLS.ECDHCurves, clientTrafficPolicyPQCECDHCurves) {
+	// Already exists – update only if ECDH curves or target references differ to avoid unnecessary writes.
+	if existing.Spec.TLS != nil &&
+		stringSlicesEqual(existing.Spec.TLS.ECDHCurves, clientTrafficPolicyPQCECDHCurves) &&
+		targetRefsEqual(existing.Spec.PolicyTargetReferences.TargetRefs, desired.Spec.PolicyTargetReferences.TargetRefs) {
 		log.V(1).Info("ClientTrafficPolicy up-to-date, skipping update", "name", ctpName)
 		return nil
 	}
@@ -127,10 +129,6 @@ func (r *HTTPRouteReconciler) deleteClientTrafficPolicy(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
 ) error {
-	if !ctpEnabled() {
-		return nil
-	}
-
 	log := logf.FromContext(ctx)
 	ctpName := gatewayName + clientTrafficPolicyNameSuffix
 
@@ -163,6 +161,23 @@ func stringSlicesEqual(a, b []string) bool {
 	}
 	for i := range a {
 		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// targetRefsEqual returns true if both slices of LocalPolicyTargetReferenceWithSectionName
+// contain the same references (Group, Kind, Name, SectionName) in the same order.
+func targetRefsEqual(a, b []gwapiv1.LocalPolicyTargetReferenceWithSectionName) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Group != b[i].Group ||
+			a[i].Kind != b[i].Kind ||
+			a[i].Name != b[i].Name ||
+			a[i].SectionName != b[i].SectionName {
 			return false
 		}
 	}
