@@ -9,6 +9,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -52,6 +53,14 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 	log := logf.FromContext(ctx)
 	ctpName := gatewayName + clientTrafficPolicyNameSuffix
 
+	// Fetch the Gateway so we can set it as the controller owner of the CTP.
+	// This lets Kubernetes GC delete the CTP automatically when the Gateway is removed.
+	gateway := &gwapiv1.Gateway{}
+	if err := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, gateway); err != nil {
+		log.Error(err, "Failed to get Gateway for OwnerReference", "gateway", gatewayName)
+		return err
+	}
+
 	desired := &egv1a1.ClientTrafficPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "gateway.envoyproxy.io/v1alpha1",
@@ -81,6 +90,13 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		},
 	}
 
+	// Set the Gateway as the controller owner so Kubernetes GC cleans up the CTP
+	// when the Gateway is deleted.
+	if err := controllerutil.SetControllerReference(gateway, desired, r.Scheme); err != nil {
+		log.Error(err, "Failed to set OwnerReference on ClientTrafficPolicy", "name", ctpName)
+		return err
+	}
+
 	existing := &egv1a1.ClientTrafficPolicy{}
 	err := r.Get(ctx, types.NamespacedName{Name: ctpName, Namespace: gatewayNamespace}, existing)
 	if err != nil {
@@ -107,16 +123,24 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		return nil
 	}
 
-	// Already exists – update only if ECDH curves or target references differ to avoid unnecessary writes.
-	if existing.Spec.TLS != nil &&
+	// Already exists – update if ECDH curves, target references, or OwnerReference differ.
+	ownerRefMissing := !hasControllerOwnerRef(existing, gateway.UID)
+	specUpToDate := existing.Spec.TLS != nil &&
 		stringSlicesEqual(existing.Spec.TLS.ECDHCurves, clientTrafficPolicyPQCECDHCurves) &&
-		targetRefsEqual(existing.Spec.PolicyTargetReferences.TargetRefs, desired.Spec.PolicyTargetReferences.TargetRefs) {
+		targetRefsEqual(existing.Spec.PolicyTargetReferences.TargetRefs, desired.Spec.PolicyTargetReferences.TargetRefs)
+	if !ownerRefMissing && specUpToDate {
 		log.V(1).Info("ClientTrafficPolicy up-to-date, skipping update", "name", ctpName)
 		return nil
 	}
 
 	existing.Spec.TLS = desired.Spec.TLS
 	existing.Spec.PolicyTargetReferences = desired.Spec.PolicyTargetReferences
+	if ownerRefMissing {
+		if err := controllerutil.SetControllerReference(gateway, existing, r.Scheme); err != nil {
+			log.Error(err, "Failed to set OwnerReference on existing ClientTrafficPolicy", "name", ctpName)
+			return err
+		}
+	}
 	if updateErr := r.Update(ctx, existing); updateErr != nil {
 		log.Error(updateErr, "Failed to update ClientTrafficPolicy", "name", ctpName)
 		return updateErr
@@ -154,6 +178,17 @@ func (r *HTTPRouteReconciler) deleteClientTrafficPolicy(
 
 	log.Info("Deleted ClientTrafficPolicy", "name", ctpName, "namespace", gatewayNamespace)
 	return nil
+}
+
+// hasControllerOwnerRef reports whether obj already carries a controller OwnerReference
+// with the given UID, indicating the relationship was previously established.
+func hasControllerOwnerRef(obj metav1.Object, uid types.UID) bool {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == uid && ref.Controller != nil && *ref.Controller {
+			return true
+		}
+	}
+	return false
 }
 
 // stringSlicesEqual returns true if both slices contain identical elements in the same order.
