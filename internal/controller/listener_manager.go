@@ -201,6 +201,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		}
 		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
 			log.Error(err, "Failed to delete ClientTrafficPolicy for gateway", "gateway", gatewayName)
+			return err
 		}
 		return nil
 	}

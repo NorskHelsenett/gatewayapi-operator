@@ -123,7 +123,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Parse old gateway namespace and name
 		if err := r.updateOldGateway(ctx, previousGatewayRef); err != nil {
 			log.Error(err, "Failed to update old gateway listeners", "gateway", previousGatewayRef)
-			// Continue with reconciliation even if old gateway update fails
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -270,6 +270,7 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 		log.Info("Deleted old gateway", "gateway", gatewayRef)
 		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
 			log.Error(err, "Failed to delete ClientTrafficPolicy for old gateway", "gateway", gatewayRef)
+			return err
 		}
 		return nil
 	}
