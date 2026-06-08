@@ -48,7 +48,7 @@ const (
 	enableClientTrafficPolicyPQCEnvVar = "ENABLE_CLIENTTRAFFICPOLICY_PQC"
 
 	// clientTrafficPolicyNameSuffix is appended to gateway names.
-	clientTrafficPolicyNameSuffix = "-ctp"
+	clientTrafficPolicyNameSuffix = "-gwo-pqc"
 )
 
 // ptr returns a pointer to the provided string
