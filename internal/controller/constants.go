@@ -43,6 +43,12 @@ const (
 	DefaultInetIpFamily = "dual"
 
 	DefaultHnetIpFamily = "ipv4"
+
+	// enableClientTrafficPolicyPQCEnvVar toggles ClientTrafficPolicy creation.
+	enableClientTrafficPolicyPQCEnvVar = "ENABLE_CLIENTTRAFFICPOLICY_PQC"
+
+	// clientTrafficPolicyNameSuffix is appended to gateway names.
+	clientTrafficPolicyNameSuffix = "-ctp"
 )
 
 // ptr returns a pointer to the provided string
