@@ -249,7 +249,12 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 
 	if err := r.Get(ctx, gatewayKey, &gateway); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			// Gateway doesn't exist anymore, nothing to update
+			// Gateway is already gone; still clean up any orphaned ClientTrafficPolicy.
+			log.Info("Old gateway not found, cleaning up ClientTrafficPolicy", "gateway", gatewayRef)
+			if ctpErr := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); ctpErr != nil {
+				log.Error(ctpErr, "Failed to delete ClientTrafficPolicy for missing old gateway", "gateway", gatewayRef)
+				return ctpErr
+			}
 			return nil
 		}
 		return err
