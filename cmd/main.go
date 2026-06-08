@@ -50,9 +50,13 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1.Install(scheme))
-	if os.Getenv("ENABLE_CLIENTTRAFFICPOLICY_PQC") != "false" {
-		utilruntime.Must(egv1a1.AddToScheme(scheme))
-	}
+	// Always register EG types so that deleteClientTrafficPolicy (cleanup mode)
+	// can use typed ClientTrafficPolicy objects regardless of whether CTP creation
+	// is enabled. The env var controls runtime behaviour (create vs. delete), not
+	// scheme registration. Without this, r.Get with a typed object returns a
+	// "no kind is registered" error that is not an apimeta.IsNoMatchError,
+	// breaking reconciliation when ENABLE_CLIENTTRAFFICPOLICY_PQC=false.
+	utilruntime.Must(egv1a1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 }
