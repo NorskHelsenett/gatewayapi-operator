@@ -114,6 +114,12 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 				log.V(1).Info("ClientTrafficPolicy CRD not available, skipping create", "gateway", gatewayName)
 				return nil
 			}
+			if errors.IsAlreadyExists(createErr) {
+				// A concurrent reconcile created the CTP between our Get and Create.
+				// Treat this as success; the next reconcile will converge the spec if needed.
+				log.V(1).Info("ClientTrafficPolicy already exists (concurrent create), skipping", "name", ctpName)
+				return nil
+			}
 			log.Error(createErr, "Failed to create ClientTrafficPolicy", "name", ctpName)
 			return createErr
 		}
