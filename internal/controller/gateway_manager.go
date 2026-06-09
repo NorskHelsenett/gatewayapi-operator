@@ -33,10 +33,15 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		if errors.IsNotFound(err) {
 			// Gateway doesn't exist, create it
 			log.Info("Creating new Gateway", "gateway", gatewayName, "namespace", gatewayNamespace)
-			if err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
+			created, err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer)
+			if err != nil {
 				return err
 			}
-			return r.ensureClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
+			// Pass the just-created Gateway object directly to avoid a cache miss:
+			// r.Get() reads from the informer cache which may not yet reflect the
+			// newly created object, causing ensureClientTrafficPolicy to incorrectly
+			// take the "gateway disappeared" cleanup path.
+			return r.ensureClientTrafficPolicy(ctx, created)
 		}
 		log.Error(err, "Failed to get Gateway", "gateway", gatewayName)
 		return err
@@ -67,24 +72,26 @@ func (r *HTTPRouteReconciler) ensureGateway(
 	if err := r.updateGatewayListeners(ctx, gateway, gatewayNamespace); err != nil {
 		return err
 	}
-	return r.ensureClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
+	return r.ensureClientTrafficPolicy(ctx, gateway)
 }
 
-// createGateway creates a new Gateway resource with initial configuration
+// createGateway creates a new Gateway resource with initial configuration.
+// It returns the created Gateway object (populated in-place by the API server)
+// so callers can use it without re-fetching from the potentially stale cache.
 func (r *HTTPRouteReconciler) createGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
 	ipamZone string,
 	ipFamily string,
 	clusterIssuer string,
-) error {
+) (*gatewayv1.Gateway, error) {
 	log := logf.FromContext(ctx)
 
 	// Collect all listeners from HTTPRoutes that reference this gateway
 	listeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		log.Error(err, "Failed to collect listeners for new Gateway")
-		return err
+		return nil, err
 	}
 
 	newGateway := &gatewayv1.Gateway{
@@ -117,34 +124,37 @@ func (r *HTTPRouteReconciler) createGateway(
 			existing := &gatewayv1.Gateway{}
 			if getErr := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, existing); getErr != nil {
 				log.Error(getErr, "Failed to get Gateway after concurrent create", "gateway", gatewayName)
-				return getErr
+				return nil, getErr
 			}
 			// Validate annotations on HTTPRoute and Gateway
 			existingIssuer := existing.Annotations[clusterIssuerAnnotation]
 			if existingIssuer != clusterIssuer {
-				return errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
+				return nil, errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
 			}
 
 			// Validate IPAM zone and ip-family match if set
 			if existing.Spec.Infrastructure != nil && existing.Spec.Infrastructure.Annotations != nil {
 				if existingZone, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
 					if string(existingZone) != ipamZone {
-						return errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
+						return nil, errors.NewBadRequest("HTTPRoute IPAM zone mismatch: Gateway has zone '" + string(existingZone) + "' but HTTPRoute requires '" + ipamZone + "'")
 					}
 				}
 				if existingFamily, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily]; exists {
 					if string(existingFamily) != ipFamily {
-						return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
+						return nil, errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 					}
 				}
 			}
 
-			return r.updateGatewayListeners(ctx, existing, gatewayNamespace)
+			if err := r.updateGatewayListeners(ctx, existing, gatewayNamespace); err != nil {
+				return nil, err
+			}
+			return existing, nil
 		}
 		log.Error(err, "Failed to create Gateway", "gateway", gatewayName)
-		return err
+		return nil, err
 	}
 
 	log.Info("Successfully created Gateway", "gateway", gatewayName, "namespace", gatewayNamespace, "listeners", len(listeners))
-	return nil
+	return newGateway, nil
 }

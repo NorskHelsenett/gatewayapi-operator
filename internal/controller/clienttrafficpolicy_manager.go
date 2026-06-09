@@ -41,10 +41,16 @@ func ctpEnabled() bool {
 // operator-managed CTPs. This makes the removal path easy: flip the env var,
 // and every gateway reconcile will delete its CTP. The function is safe to
 // call on clusters that do not have the ClientTrafficPolicy CRD installed.
+//
+// gateway must be the live object (UID populated) so that an OwnerReference can
+// be set without re-fetching from the potentially stale informer cache.
 func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 	ctx context.Context,
-	gatewayName, gatewayNamespace string,
+	gateway *gwapiv1.Gateway,
 ) error {
+	gatewayName := gateway.Name
+	gatewayNamespace := gateway.Namespace
+
 	if !ctpEnabled() {
 		// Cleanup mode: remove any CTP we may have created previously.
 		return r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
@@ -52,19 +58,6 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 
 	log := logf.FromContext(ctx)
 	ctpName := gatewayName + clientTrafficPolicyNameSuffix
-
-	// Fetch the Gateway so we can set it as the controller owner of the CTP.
-	// This lets Kubernetes GC delete the CTP automatically when the Gateway is removed.
-	gateway := &gwapiv1.Gateway{}
-	if err := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, gateway); err != nil {
-		if errors.IsNotFound(err) {
-			// Gateway disappeared (e.g. deleted due to no remaining listeners). Ensure we don't
-			// leave an operator-managed CTP behind, and don't fail reconciliation.
-			return r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace)
-		}
-		log.Error(err, "Failed to get Gateway for OwnerReference", "gateway", gatewayName)
-		return err
-	}
 
 	desired := &egv1a1.ClientTrafficPolicy{
 		TypeMeta: metav1.TypeMeta{
