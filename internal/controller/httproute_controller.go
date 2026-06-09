@@ -270,9 +270,13 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 	if len(listeners) == 0 {
 		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayRef)
 		if err := r.Delete(ctx, &gateway); err != nil {
-			return err
+			if client.IgnoreNotFound(err) != nil {
+				return err
+			}
+			log.Info("Old gateway already deleted (concurrent deletion)", "gateway", gatewayRef)
+		} else {
+			log.Info("Deleted old gateway", "gateway", gatewayRef)
 		}
-		log.Info("Deleted old gateway", "gateway", gatewayRef)
 		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
 			log.Error(err, "Failed to delete ClientTrafficPolicy for old gateway", "gateway", gatewayRef)
 			return err
