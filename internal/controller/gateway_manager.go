@@ -37,6 +37,10 @@ func (r *HTTPRouteReconciler) ensureGateway(
 			if err != nil {
 				return err
 			}
+			if created == nil {
+				// Concurrent create path: listeners were already 0, gateway deleted.
+				return nil
+			}
 			// Pass the just-created Gateway object directly to avoid a cache miss:
 			// r.Get() reads from the informer cache which may not yet reflect the
 			// newly created object, causing ensureClientTrafficPolicy to incorrectly
@@ -69,8 +73,13 @@ func (r *HTTPRouteReconciler) ensureGateway(
 
 	// Gateway exists and configuration matches, update listeners
 	log.V(1).Info("Gateway exists, updating listeners", "gateway", gatewayName, "namespace", gatewayNamespace)
-	if err := r.updateGatewayListeners(ctx, gateway, gatewayNamespace); err != nil {
+	deleted, err := r.updateGatewayListeners(ctx, gateway, gatewayNamespace)
+	if err != nil {
 		return err
+	}
+	if deleted {
+		// Gateway (and its CTP) were deleted because no listeners remain; nothing more to do.
+		return nil
 	}
 	return r.ensureClientTrafficPolicy(ctx, gateway)
 }
@@ -146,8 +155,14 @@ func (r *HTTPRouteReconciler) createGateway(
 				}
 			}
 
-			if err := r.updateGatewayListeners(ctx, existing, gatewayNamespace); err != nil {
+			deleted, err := r.updateGatewayListeners(ctx, existing, gatewayNamespace)
+			if err != nil {
 				return nil, err
+			}
+			if deleted {
+				// No listeners remain; gateway and CTP were deleted. Signal to ensureGateway
+				// that no further CTP work is needed.
+				return nil, nil
 			}
 			return existing, nil
 		}

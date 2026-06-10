@@ -172,12 +172,14 @@ func (r *HTTPRouteReconciler) createHTTPListener(
 	}
 }
 
-// updateGatewayListeners updates the gateway's listeners based on all HTTPRoutes referencing it
+// updateGatewayListeners updates the gateway's listeners based on all HTTPRoutes referencing it.
+// It returns (true, nil) when the Gateway (and its CTP) were deleted because no listeners remain,
+// so callers can skip any post-update work that assumes the Gateway still exists.
 func (r *HTTPRouteReconciler) updateGatewayListeners(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
 	gatewayNamespace string,
-) error {
+) (deleted bool, err error) {
 	log := logf.FromContext(ctx)
 
 	gatewayName := gateway.Name
@@ -185,25 +187,25 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	// Collect listeners and annotations from all HTTPRoutes referencing this gateway
 	newListeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// If no listeners remain, delete the gateway and any associated CTP
 	if len(newListeners) == 0 {
 		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayName, "namespace", gateway.Namespace)
-		if err := r.Delete(ctx, gateway); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return err
+		if delErr := r.Delete(ctx, gateway); delErr != nil {
+			if client.IgnoreNotFound(delErr) != nil {
+				return false, delErr
 			}
 			log.Info("Gateway already deleted (concurrent deletion)", "gateway", gatewayName)
 		} else {
 			log.Info("Deleted gateway", "gateway", gatewayName)
 		}
-		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
-			log.Error(err, "Failed to delete ClientTrafficPolicy for gateway", "gateway", gatewayName)
-			return err
+		if ctpErr := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); ctpErr != nil {
+			log.Error(ctpErr, "Failed to delete ClientTrafficPolicy for gateway", "gateway", gatewayName)
+			return false, ctpErr
 		}
-		return nil
+		return true, nil
 	}
 
 	namespacedName := &types.NamespacedName{
@@ -236,15 +238,13 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		// Ignore not found errors - the object might have been deleted by another reconciliation
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "Failed to remove finalizer")
-			return err
-		} else {
-			log.Info("Gateway already deleted", "name", gateway.Name)
-			return nil
+			return false, err
 		}
-	} else {
-		log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
-		return nil
+		log.Info("Gateway already deleted", "name", gateway.Name)
+		return false, nil
 	}
+	log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
+	return false, nil
 
 }
 

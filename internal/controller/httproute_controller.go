@@ -337,7 +337,7 @@ func (r *HTTPRouteReconciler) handleHTTPRouteDeletion(
 
 	// Update gateway listeners to exclude the deleted route's hostnames
 	// Server-Side Apply will handle any conflicts automatically
-	if err := r.updateGatewayListeners(ctx, &gateway, gatewayNamespace); err != nil {
+	if _, err := r.updateGatewayListeners(ctx, &gateway, gatewayNamespace); err != nil {
 		log.Error(err, "Failed to update Gateway listeners after HTTPRoute deletion")
 		return err
 	}
