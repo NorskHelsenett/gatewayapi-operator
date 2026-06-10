@@ -173,8 +173,9 @@ func (r *HTTPRouteReconciler) createHTTPListener(
 }
 
 // updateGatewayListeners updates the gateway's listeners based on all HTTPRoutes referencing it.
-// It returns (true, nil) when the Gateway (and its CTP) were deleted because no listeners remain,
+// It returns (true, nil) when the Gateway was deleted or is already gone (e.g. due to concurrent deletion),
 // so callers can skip any post-update work that assumes the Gateway still exists.
+// When no listeners remain, it also deletes any associated ClientTrafficPolicy.
 func (r *HTTPRouteReconciler) updateGatewayListeners(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,

@@ -38,7 +38,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 				return err
 			}
 			if created == nil {
-				// Concurrent create path: listeners were already 0, gateway deleted.
+				// Gateway no longer exists (e.g. it was deleted concurrently); nothing more to do.
 				return nil
 			}
 
