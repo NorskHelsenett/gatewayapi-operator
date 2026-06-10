@@ -237,7 +237,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	if err != nil {
 		// Ignore not found errors - the object might have been deleted by another reconciliation
 		if client.IgnoreNotFound(err) != nil {
-			log.Error(err, "Failed to remove finalizer")
+			log.Error(err, "Failed to update Gateway listeners")
 			return false, err
 		}
 		log.Info("Gateway already deleted", "name", gateway.Name)
