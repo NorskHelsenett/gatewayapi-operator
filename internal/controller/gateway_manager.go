@@ -41,10 +41,10 @@ func (r *HTTPRouteReconciler) ensureGateway(
 				// Concurrent create path: listeners were already 0, gateway deleted.
 				return nil
 			}
-			// Pass the just-created Gateway object directly to avoid a cache miss:
-			// r.Get() reads from the informer cache which may not yet reflect the
-			// newly created object, causing ensureClientTrafficPolicy to incorrectly
-			// take the "gateway disappeared" cleanup path.
+
+			// Pass the just-created Gateway object directly so ensureClientTrafficPolicy
+			// can set an OwnerReference using the live UID without re-fetching via the
+			// informer cache (which may lag immediately after Create()).
 			return r.ensureClientTrafficPolicy(ctx, created)
 		}
 		log.Error(err, "Failed to get Gateway", "gateway", gatewayName)
