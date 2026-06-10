@@ -75,8 +75,8 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 				TargetRefs: []gwapiv1.LocalPolicyTargetReferenceWithSectionName{
 					{
 						LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
-							Group: "gateway.networking.k8s.io",
-							Kind:  "Gateway",
+							Group: gwapiv1.Group("gateway.networking.k8s.io"),
+							Kind:  gwapiv1.Kind("Gateway"),
 							Name:  gwapiv1.ObjectName(gatewayName),
 						},
 					},
