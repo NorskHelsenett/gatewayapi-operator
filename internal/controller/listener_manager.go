@@ -241,7 +241,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 			return false, err
 		}
 		log.Info("Gateway already deleted", "name", gateway.Name)
-		return false, nil
+		return true, nil
 	}
 	log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
 	return false, nil
