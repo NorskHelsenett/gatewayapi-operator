@@ -34,4 +34,16 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - gateway.envoyproxy.io
+  resources:
+  - clienttrafficpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 {{- end -}}

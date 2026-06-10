@@ -25,6 +25,7 @@ type HTTPRouteReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=clienttrafficpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -122,7 +123,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// Parse old gateway namespace and name
 		if err := r.updateOldGateway(ctx, previousGatewayRef); err != nil {
 			log.Error(err, "Failed to update old gateway listeners", "gateway", previousGatewayRef)
-			// Continue with reconciliation even if old gateway update fails
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -248,7 +249,12 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 
 	if err := r.Get(ctx, gatewayKey, &gateway); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			// Gateway doesn't exist anymore, nothing to update
+			// Gateway is already gone; still clean up any orphaned ClientTrafficPolicy.
+			log.Info("Old gateway not found, cleaning up ClientTrafficPolicy", "gateway", gatewayRef)
+			if ctpErr := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); ctpErr != nil {
+				log.Error(ctpErr, "Failed to delete ClientTrafficPolicy for missing old gateway", "gateway", gatewayRef)
+				return ctpErr
+			}
 			return nil
 		}
 		return err
@@ -264,9 +270,17 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 	if len(listeners) == 0 {
 		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayRef)
 		if err := r.Delete(ctx, &gateway); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				return err
+			}
+			log.Info("Old gateway already deleted (concurrent deletion)", "gateway", gatewayRef)
+		} else {
+			log.Info("Deleted old gateway", "gateway", gatewayRef)
+		}
+		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
+			log.Error(err, "Failed to delete ClientTrafficPolicy for old gateway", "gateway", gatewayRef)
 			return err
 		}
-		log.Info("Deleted old gateway", "gateway", gatewayRef)
 		return nil
 	}
 
@@ -323,7 +337,7 @@ func (r *HTTPRouteReconciler) handleHTTPRouteDeletion(
 
 	// Update gateway listeners to exclude the deleted route's hostnames
 	// Server-Side Apply will handle any conflicts automatically
-	if err := r.updateGatewayListeners(ctx, &gateway, gatewayNamespace); err != nil {
+	if _, err := r.updateGatewayListeners(ctx, &gateway, gatewayNamespace); err != nil {
 		log.Error(err, "Failed to update Gateway listeners after HTTPRoute deletion")
 		return err
 	}
