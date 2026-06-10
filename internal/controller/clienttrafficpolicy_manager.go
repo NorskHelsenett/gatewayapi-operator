@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	goerrors "errors"
 	"os"
 
 	egv1a1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -148,13 +149,37 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		latest.Spec.PolicyTargetReferences = desired.Spec.PolicyTargetReferences
 		if !hasControllerOwnerRef(latest, gateway.UID) {
 			if err := controllerutil.SetControllerReference(gateway, latest, r.Scheme); err != nil {
-				log.Error(err, "Failed to set OwnerReference on existing ClientTrafficPolicy", "name", ctpName)
+				// AlreadyOwnedError is not a conflict; RetryOnConflict will not retry it.
+				// Return it as-is so the caller can handle it below.
 				return err
 			}
 		}
 		return r.Update(ctx, latest)
 	})
 	if updateErr != nil {
+		var alreadyOwned *controllerutil.AlreadyOwnedError
+		if goerrors.As(updateErr, &alreadyOwned) {
+			// The CTP is controlled by a stale Gateway (deleted and recreated with a new
+			// UID). Delete it so the next reconcile creates a fresh one owned by the
+			// current Gateway. Kubernetes GC would eventually clean this up anyway, but
+			// deleting eagerly avoids repeated reconcile failures.
+			log.Info("ClientTrafficPolicy owned by stale controller, deleting for recreation",
+				"name", ctpName, "owner", alreadyOwned.Owner.Name)
+			stale := &egv1a1.ClientTrafficPolicy{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: ctpName, Namespace: gatewayNamespace}, stale); getErr != nil {
+				if errors.IsNotFound(getErr) {
+					return nil // already gone
+				}
+				log.Error(getErr, "Failed to get stale ClientTrafficPolicy for deletion", "name", ctpName)
+				return getErr
+			}
+			if delErr := r.Delete(ctx, stale); delErr != nil && !errors.IsNotFound(delErr) {
+				log.Error(delErr, "Failed to delete stale ClientTrafficPolicy", "name", ctpName)
+				return delErr
+			}
+			log.Info("Deleted stale ClientTrafficPolicy; will recreate on next reconcile", "name", ctpName)
+			return nil
+		}
 		log.Error(updateErr, "Failed to update ClientTrafficPolicy", "name", ctpName)
 		return updateErr
 	}
