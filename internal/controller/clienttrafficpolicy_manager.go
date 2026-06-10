@@ -9,6 +9,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -137,15 +138,23 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		return nil
 	}
 
-	existing.Spec.TLS = desired.Spec.TLS
-	existing.Spec.PolicyTargetReferences = desired.Spec.PolicyTargetReferences
-	if ownerRefMissing {
-		if err := controllerutil.SetControllerReference(gateway, existing, r.Scheme); err != nil {
-			log.Error(err, "Failed to set OwnerReference on existing ClientTrafficPolicy", "name", ctpName)
-			return err
+	updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Re-fetch to get the latest resourceVersion before each attempt.
+		latest := &egv1a1.ClientTrafficPolicy{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: ctpName, Namespace: gatewayNamespace}, latest); getErr != nil {
+			return getErr
 		}
-	}
-	if updateErr := r.Update(ctx, existing); updateErr != nil {
+		latest.Spec.TLS = desired.Spec.TLS
+		latest.Spec.PolicyTargetReferences = desired.Spec.PolicyTargetReferences
+		if !hasControllerOwnerRef(latest, gateway.UID) {
+			if err := controllerutil.SetControllerReference(gateway, latest, r.Scheme); err != nil {
+				log.Error(err, "Failed to set OwnerReference on existing ClientTrafficPolicy", "name", ctpName)
+				return err
+			}
+		}
+		return r.Update(ctx, latest)
+	})
+	if updateErr != nil {
 		log.Error(updateErr, "Failed to update ClientTrafficPolicy", "name", ctpName)
 		return updateErr
 	}
