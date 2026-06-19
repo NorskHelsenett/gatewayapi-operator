@@ -13,18 +13,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 #v6
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c #v6
         with:
           go-version-file: go.mod
 
       - name: Install the latest version of kind
         run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          ARCH=$(go env GOARCH)
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/${VERSION}/kind-linux-${ARCH}
+          case "$ARCH" in
+            amd64)
+              echo "${SHA256_AMD64}  ./kind" | sha256sum -c -
+              ;;
+            arm64)
+              echo "${SHA256_ARM64}  ./kind" | sha256sum -c -
+              ;;
+            *)
+              echo "Unsupported architecture: $ARCH" >&2
+              exit 1
+              ;;
+          esac
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
+        env:
+          VERSION: v0.32.0
+          SHA256_AMD64: 50030de23cf40a18505f20426f6a8506bedf13c6e509244bd1fa9463721b0f54
+          SHA256_ARM64: b92cd615e97585de8ddade28ed5cd7feb4248d717c233eea5b03c37298900f5d
 
       - name: Verify kind installation
         run: kind version
@@ -39,8 +56,9 @@ jobs:
           kind load docker-image gatewayapi-operator:v0.1.0
 
       - name: Install Helm
-        run: |
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 #v5
+        with:
+          version: v3.16.4
 
       - name: Verify Helm installation
         run: helm version
