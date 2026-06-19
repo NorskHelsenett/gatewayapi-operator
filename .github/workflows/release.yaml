@@ -101,7 +101,7 @@ jobs:
         run: |
           wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY}.tar.gz -O ${BINARY}.tar.gz
           echo "${SHA256}  ${BINARY}.tar.gz" | sha256sum -c -
-          tar xz < ${BINARY}.tar.gz && mv ${BINARY} yq && chmod +x yq
+          tar xzf ${BINARY}.tar.gz && mv ${BINARY} yq && chmod +x yq
         env:
           VERSION: v4.44.5
           BINARY: yq_linux_amd64
