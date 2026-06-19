@@ -99,10 +99,13 @@ jobs:
 
       - name: install-yq
         run: |
-          wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY}.tar.gz -O - | tar xz && mv ${BINARY} yq && chmod +x yq
+          wget https://github.com/mikefarah/yq/releases/download/${VERSION}/${BINARY}.tar.gz -O ${BINARY}.tar.gz
+          echo "${SHA256}  ${BINARY}.tar.gz" | sha256sum -c -
+          tar xz < ${BINARY}.tar.gz && mv ${BINARY} yq && chmod +x yq
         env:
           VERSION: v4.44.5
           BINARY: yq_linux_amd64
+          SHA256: cc9ee4d476717d2b90e4f20cf2bf31f9d6bfba830227960f6e0401db74270311
 
       - name: Build helm chart
         run: |
