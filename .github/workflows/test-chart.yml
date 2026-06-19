@@ -22,9 +22,19 @@ jobs:
 
       - name: Install the latest version of kind
         run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          ARCH=$(go env GOARCH)
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/${VERSION}/kind-linux-${ARCH}
+          if [[ "$ARCH" == "amd64" ]]; then
+            echo "${SHA256_AMD64}  ./kind" | sha256sum -c -
+          else
+            echo "${SHA256_ARM64}  ./kind" | sha256sum -c -
+          fi
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
+        env:
+          VERSION: v0.32.0
+          SHA256_AMD64: 50030de23cf40a18505f20426f6a8506bedf13c6e509244bd1fa9463721b0f54
+          SHA256_ARM64: b92cd615e97585de8ddade28ed5cd7feb4248d717c233eea5b03c37298900f5d
 
       - name: Verify kind installation
         run: kind version
