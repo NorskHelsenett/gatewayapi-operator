@@ -39,8 +39,9 @@ jobs:
           kind load docker-image gatewayapi-operator:v0.1.0
 
       - name: Install Helm
-        run: |
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 #v5
+        with:
+          version: v3.16.4
 
       - name: Verify Helm installation
         run: helm version
