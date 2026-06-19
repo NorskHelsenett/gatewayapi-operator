@@ -24,11 +24,18 @@ jobs:
         run: |
           ARCH=$(go env GOARCH)
           curl -Lo ./kind https://kind.sigs.k8s.io/dl/${VERSION}/kind-linux-${ARCH}
-          if [[ "$ARCH" == "amd64" ]]; then
-            echo "${SHA256_AMD64}  ./kind" | sha256sum -c -
-          else
-            echo "${SHA256_ARM64}  ./kind" | sha256sum -c -
-          fi
+          case "$ARCH" in
+            amd64)
+              echo "${SHA256_AMD64}  ./kind" | sha256sum -c -
+              ;;
+            arm64)
+              echo "${SHA256_ARM64}  ./kind" | sha256sum -c -
+              ;;
+            *)
+              echo "Unsupported architecture: $ARCH" >&2
+              exit 1
+              ;;
+          esac
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
         env:
