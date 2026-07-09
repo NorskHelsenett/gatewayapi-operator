@@ -125,6 +125,7 @@ func (r *HTTPRouteReconciler) createGateway(
 	UpdateGatewayAnnotations(ctx, newGateway, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 
 	UpdateGatewayClass(newGateway)
+	UpdateGatewayAllowedListeners(newGateway)
 
 	if err := r.Create(ctx, newGateway); err != nil {
 		if errors.IsAlreadyExists(err) {

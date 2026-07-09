@@ -25,6 +25,7 @@ type HTTPRouteReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=listenersets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=clienttrafficpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -55,24 +56,38 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	log.V(1).Info("Reconciling HTTPRoute", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
 
-	// Extract gateway information from first parent ref
-	// TODO: Support multiple parent refs in the future
-	gatewayName := string(httpRoute.Spec.ParentRefs[0].Name)
+	// Extract parent reference. When kind=ListenerSet the route binds to a user-defined
+	// ListenerSet; the operator only updates that ListenerSet's listeners.
+	// When kind=Gateway (or unset) the operator manages the Gateway's listeners directly.
+	parentRef := httpRoute.Spec.ParentRefs[0]
+	isListenerSetMode := parentRef.Kind != nil && string(*parentRef.Kind) == "ListenerSet"
+
+	var gatewayName, listenerSetName string
+	if isListenerSetMode {
+		listenerSetName = string(parentRef.Name)
+	} else {
+		gatewayName = string(parentRef.Name)
+	}
 	gatewayNamespace := httpRoute.Namespace
-	if httpRoute.Spec.ParentRefs[0].Namespace != nil {
-		gatewayNamespace = string(*httpRoute.Spec.ParentRefs[0].Namespace)
+	if parentRef.Namespace != nil {
+		gatewayNamespace = string(*parentRef.Namespace)
 	}
 
-	// Handle deletion - update gateway listeners to remove this route's hostnames
+	// Handle deletion
 	if !httpRoute.DeletionTimestamp.IsZero() {
-		log.Info("HTTPRoute is being deleted, updating gateway listeners", "name", httpRoute.Name)
+		log.Info("HTTPRoute is being deleted, updating listeners", "name", httpRoute.Name)
 
 		// Check if finalizer is present
 		if controllerutil.ContainsFinalizer(&httpRoute, httprouteFinalizerName) {
-			// Update gateway to remove this route's listeners
-			if err := r.handleHTTPRouteDeletion(ctx, gatewayName, gatewayNamespace); err != nil {
-				log.Error(err, "Failed to handle HTTPRoute deletion")
-				return ctrl.Result{}, err
+			var delErr error
+			if isListenerSetMode {
+				delErr = r.handleHTTPRouteDeletionListenerSet(ctx, listenerSetName, gatewayNamespace)
+			} else {
+				delErr = r.handleHTTPRouteDeletion(ctx, gatewayName, gatewayNamespace)
+			}
+			if delErr != nil {
+				log.Error(delErr, "Failed to handle HTTPRoute deletion")
+				return ctrl.Result{}, delErr
 			}
 
 			// Remove finalizer using retry logic to handle conflicts
@@ -113,17 +128,18 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	// Check if gateway reference has changed
-	currentGatewayRef := gatewayNamespace + "/" + gatewayName
-	previousGatewayRef := httpRoute.Annotations[previousGatewayAnnotationKey]
+	// Check if gateway reference has changed — only tracked in Gateway mode.
+	// In ListenerSet mode the user controls the gateway via the ListenerSet spec.
+	if !isListenerSetMode {
+		currentGatewayRef := gatewayNamespace + "/" + gatewayName
+		previousGatewayRef := httpRoute.Annotations[previousGatewayAnnotationKey]
 
-	if previousGatewayRef != "" && previousGatewayRef != currentGatewayRef {
-		log.Info("Gateway reference changed, updating old gateway", "oldGateway", previousGatewayRef, "newGateway", currentGatewayRef)
-
-		// Parse old gateway namespace and name
-		if err := r.updateOldGateway(ctx, previousGatewayRef); err != nil {
-			log.Error(err, "Failed to update old gateway listeners", "gateway", previousGatewayRef)
-			return ctrl.Result{}, err
+		if previousGatewayRef != "" && previousGatewayRef != currentGatewayRef {
+			log.Info("Gateway reference changed, updating old gateway", "oldGateway", previousGatewayRef, "newGateway", currentGatewayRef)
+			if err := r.updateOldGateway(ctx, previousGatewayRef); err != nil {
+				log.Error(err, "Failed to update old gateway listeners", "gateway", previousGatewayRef)
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -164,9 +180,13 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		httpRoute.Annotations[reconcileAnnotationKey] = "true"
 		needsUpdate = true
 	}
-	if httpRoute.Annotations[previousGatewayAnnotationKey] != currentGatewayRef {
-		httpRoute.Annotations[previousGatewayAnnotationKey] = currentGatewayRef
-		needsUpdate = true
+	// Track the previous gateway ref only in Gateway mode
+	if !isListenerSetMode {
+		currentGatewayRef := gatewayNamespace + "/" + gatewayName
+		if httpRoute.Annotations[previousGatewayAnnotationKey] != currentGatewayRef {
+			httpRoute.Annotations[previousGatewayAnnotationKey] = currentGatewayRef
+			needsUpdate = true
+		}
 	}
 
 	if needsUpdate {
@@ -213,15 +233,23 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.V(1).Info("No cluster issuer annotation found, using default", "clusterIssuer", clusterIssuer)
 	}
 
-	// Ensure the Gateway exists and has correct listeners
-	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
-		return ctrl.Result{}, err
+	// Ensure correct listeners for this HTTPRoute
+	if isListenerSetMode {
+		if err := r.reconcileListenerSetMode(ctx, listenerSetName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else {
+		if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
 }
 
-// updateOldGateway updates the listeners on the old gateway when HTTPRoute changes gateways
+// updateOldGateway reconciles the old gateway when an HTTPRoute changes its parentRef.
+// It re-evaluates remaining listeners and either updates the ListenerSet or deletes
+// the gateway, ListenerSet, and ClientTrafficPolicy when nothing remains.
 func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef string) error {
 	log := logf.FromContext(ctx)
 
@@ -249,7 +277,7 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 
 	if err := r.Get(ctx, gatewayKey, &gateway); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			// Gateway is already gone; still clean up any orphaned ClientTrafficPolicy.
+			// Gateway is already gone; clean up any orphaned CTP.
 			log.Info("Old gateway not found, cleaning up ClientTrafficPolicy", "gateway", gatewayRef)
 			if ctpErr := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); ctpErr != nil {
 				log.Error(ctpErr, "Failed to delete ClientTrafficPolicy for missing old gateway", "gateway", gatewayRef)
@@ -260,55 +288,65 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 		return err
 	}
 
-	// Collect listeners for the old gateway (excluding routes that no longer reference it)
-	listeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	// Delegate to updateGatewayListeners which handles the full lifecycle:
+	// re-collect listeners → update ListenerSet → update Gateway stub → delete all if empty.
+	if _, err := r.updateGatewayListeners(ctx, &gateway, gatewayNamespace); err != nil {
+		log.Error(err, "Failed to update old gateway listeners", "gateway", gatewayRef)
+		return err
+	}
+	log.Info("Updated old gateway", "gateway", gatewayRef)
+	return nil
+}
+
+// reconcileListenerSetMode syncs the listeners of a user-defined ListenerSet based on all
+// HTTPRoutes that reference it (parentRef.kind=ListenerSet). The ListenerSet must already
+// exist — the operator never creates or deletes user-defined ListenerSets.
+func (r *HTTPRouteReconciler) reconcileListenerSetMode(
+	ctx context.Context,
+	listenerSetName, listenerSetNamespace string,
+	ipamZone, ipFamily, clusterIssuer string,
+) error {
+	log := logf.FromContext(ctx)
+
+	listeners, ignoreDns, overrideInfra, overrideTtl, err := r.collectListenersForListenerSet(ctx, listenerSetName, listenerSetNamespace)
 	if err != nil {
 		return err
 	}
 
-	// If no listeners remain, delete the gateway instead of updating with empty listeners
 	if len(listeners) == 0 {
-		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayRef)
-		if err := r.Delete(ctx, &gateway); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return err
-			}
-			log.Info("Old gateway already deleted (concurrent deletion)", "gateway", gatewayRef)
-		} else {
-			log.Info("Deleted old gateway", "gateway", gatewayRef)
-		}
-		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
-			log.Error(err, "Failed to delete ClientTrafficPolicy for old gateway", "gateway", gatewayRef)
-			return err
-		}
+		log.V(1).Info("No active routes for ListenerSet; nothing to update", "listenerSet", listenerSetName)
 		return nil
 	}
 
-	// Use Server-Side Apply to update listeners
-	// Include gatewayClassName since it's a required field
-	patch := &gatewayv1.Gateway{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1",
-			Kind:       "Gateway",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      gatewayName,
-			Namespace: gatewayNamespace,
-		},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: gateway.Spec.GatewayClassName,
-			Listeners:        listeners,
-		},
+	if err := r.updateUserListenerSet(ctx, listenerSetName, listenerSetNamespace, listeners, ignoreDns, overrideInfra, overrideTtl, clusterIssuer); err != nil {
+		log.Error(err, "Failed to update ListenerSet", "listenerSet", listenerSetName)
+		return err
 	}
-	UpdateGatewayAnnotations(ctx, patch, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
+	return nil
+}
 
-	err = r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator"))
+// handleHTTPRouteDeletionListenerSet re-syncs a user-defined ListenerSet after an HTTPRoute
+// that referenced it is deleted. The ListenerSet itself is never deleted by the operator.
+func (r *HTTPRouteReconciler) handleHTTPRouteDeletionListenerSet(
+	ctx context.Context,
+	listenerSetName, listenerSetNamespace string,
+) error {
+	log := logf.FromContext(ctx)
+
+	listeners, ignoreDns, overrideInfra, overrideTtl, err := r.collectListenersForListenerSet(ctx, listenerSetName, listenerSetNamespace)
 	if err != nil {
 		return err
 	}
 
-	log.Info("Updated old gateway listeners", "gateway", gatewayRef, "listeners", len(listeners))
-	return nil
+	if len(listeners) == 0 {
+		log.Info("No routes remain for ListenerSet after deletion; leaving it unchanged (user-owned)", "listenerSet", listenerSetName)
+		return nil
+	}
+
+	// Pass "" for clusterIssuer: on deletion we don't have a resolved issuer for the remaining
+	// routes, so preserve whatever is already on the ListenerSet. The next normal reconcile
+	// of any remaining route will write the correct value.
+	return r.updateUserListenerSet(ctx, listenerSetName, listenerSetNamespace, listeners, ignoreDns, overrideInfra, overrideTtl, "")
 }
 
 // handleHTTPRouteDeletion updates gateway listeners when an HTTPRoute is deleted

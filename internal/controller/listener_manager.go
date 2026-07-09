@@ -53,8 +53,12 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 			continue
 		}
 
-		// Check if this route references our gateway
+		// Check if this route references our gateway via a direct Gateway parentRef
 		for _, parentRef := range route.Spec.ParentRefs {
+			// Skip ListenerSet parentRefs — those are handled by collectListenersForListenerSet
+			if parentRef.Kind != nil && string(*parentRef.Kind) == "ListenerSet" {
+				continue
+			}
 			refName := string(parentRef.Name)
 			refNamespace := gatewayNamespace
 			if parentRef.Namespace != nil {
@@ -105,6 +109,78 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		"activeRoutes", routeCount,
 		"skippedRoutes", skippedCount,
 		"totalRoutes", len(httpRouteList.Items))
+
+	return listeners, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
+}
+
+// collectListenersForListenerSet gathers all hostnames from HTTPRoutes whose parentRef
+// points directly to the named ListenerSet (kind=ListenerSet) and builds listener entries.
+func (r *HTTPRouteReconciler) collectListenersForListenerSet(
+	ctx context.Context,
+	listenerSetName, listenerSetNamespace string,
+) ([]gatewayv1.Listener, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
+	log := logf.FromContext(ctx)
+
+	httpRouteList := &gatewayv1.HTTPRouteList{}
+	if err := r.List(ctx, httpRouteList); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	hostnameSet := make(map[string]bool)
+	httpHostnameSet := make(map[string]bool)
+	ignoreDnsUpdates := annotations.NewIgnoreDnsUpdates()
+	overrideTtl := annotations.NewOverrideTtl()
+	overrideInfrastructure := annotations.NewOverrideInfrastructure()
+	routeCount := 0
+
+	for _, route := range httpRouteList.Items {
+		if !route.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if route.Annotations[annotations.AnnotationUseHttprouteOperator] != "true" {
+			continue
+		}
+
+		for _, parentRef := range route.Spec.ParentRefs {
+			if parentRef.Kind == nil || string(*parentRef.Kind) != "ListenerSet" {
+				continue
+			}
+			refName := string(parentRef.Name)
+			refNamespace := listenerSetNamespace
+			if parentRef.Namespace != nil {
+				refNamespace = string(*parentRef.Namespace)
+			}
+			if refName != listenerSetName || refNamespace != listenerSetNamespace {
+				continue
+			}
+
+			routeCount++
+			for _, hostname := range route.Spec.Hostnames {
+				if route.Annotations[annotations.AnnotationHttpOnlyListener] == "true" {
+					httpHostnameSet[string(hostname)] = true
+				} else {
+					hostnameSet[string(hostname)] = true
+				}
+				ignoreDnsUpdates.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationDnsIgnore])
+				overrideInfrastructure.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationOverrideInfrastructure])
+				overrideTtl.ParseAnnotation(string(hostname), route.Annotations[annotations.AnnotationOverrideTTL])
+			}
+			break
+		}
+	}
+
+	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
+	for hostname := range hostnameSet {
+		listeners = append(listeners, r.createHTTPSListener(hostname, listenerSetNamespace))
+	}
+	for httpHostname := range httpHostnameSet {
+		listeners = append(listeners, r.createHTTPListener(httpHostname))
+	}
+
+	log.Info("Collected listeners for ListenerSet",
+		"listenerSet", listenerSetName,
+		"listeners", len(listeners),
+		"activeRoutes", routeCount)
 
 	return listeners, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
 }
@@ -173,9 +249,8 @@ func (r *HTTPRouteReconciler) createHTTPListener(
 }
 
 // updateGatewayListeners updates the gateway's listeners based on all HTTPRoutes referencing it.
-// It returns (true, nil) when the Gateway was deleted or is already gone (e.g. due to concurrent deletion),
-// so callers can skip any post-update work that assumes the Gateway still exists.
-// When no listeners remain, it also deletes any associated ClientTrafficPolicy.
+// It returns (true, nil) when the Gateway was deleted or is already gone.
+// When no listeners remain, it deletes the gateway and associated ClientTrafficPolicy.
 func (r *HTTPRouteReconciler) updateGatewayListeners(
 	ctx context.Context,
 	gateway *gatewayv1.Gateway,
@@ -185,7 +260,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 
 	gatewayName := gateway.Name
 
-	// Collect listeners and annotations from all HTTPRoutes referencing this gateway
+	// Collect listeners from all Gateway-mode HTTPRoutes referencing this gateway
 	newListeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		return false, err
@@ -214,29 +289,21 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		Name:      gatewayName,
 	}
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		// Fetch latest version
 		var latest gatewayv1.Gateway
 		if err := r.Get(ctx, *namespacedName, &latest); err != nil {
-			// If the object is already gone, nothing to do
 			if client.IgnoreNotFound(err) == nil {
 				return nil
 			}
 			return err
 		}
-		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
-
-		// Update the gateway's annotations
 		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
-
-		// Update the gateway's GatewayClass
 		UpdateGatewayClass(&latest)
-
+		UpdateGatewayAllowedListeners(&latest)
 		return r.Update(ctx, &latest)
 	})
 
 	if err != nil {
-		// Ignore not found errors - the object might have been deleted by another reconciliation
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "Failed to update Gateway listeners")
 			return false, err
@@ -246,7 +313,6 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	}
 	log.Info("Updated Gateway listeners", "gateway", gatewayName, "listeners", len(newListeners))
 	return false, nil
-
 }
 
 func UpdateGatewayAnnotations(ctx context.Context, gw *gatewayv1.Gateway, ignoreDns annotations.IgnoreDnsUpdates, overrideInfra annotations.OverrideInfrastrucutre, overrideTTL annotations.OverrideTtl) {
@@ -294,7 +360,30 @@ func UpdateGatewayClass(gw *gatewayv1.Gateway) {
 		} else {
 			// Use Hnet gatewayclass if AnnotationIPAMZone is not InetIPAMZone
 			gw.Spec.GatewayClassName = gatewayv1.ObjectName(hnetGatewayClassName)
-
 		}
+	}
+}
+
+// UpdateGatewayAllowedListeners ensures the Gateway allows user-defined ListenerSets
+// in the same namespace to attach. It is idempotent and safe to call on both
+// newly created and pre-existing Gateways.
+func UpdateGatewayAllowedListeners(gw *gatewayv1.Gateway) {
+	from := gatewayv1.NamespacesFromAll
+	if gw.Spec.AllowedListeners == nil {
+		gw.Spec.AllowedListeners = &gatewayv1.AllowedListeners{
+			Namespaces: &gatewayv1.ListenerNamespaces{
+				From: &from,
+			},
+		}
+		return
+	}
+	if gw.Spec.AllowedListeners.Namespaces == nil {
+		gw.Spec.AllowedListeners.Namespaces = &gatewayv1.ListenerNamespaces{
+			From: &from,
+		}
+		return
+	}
+	if gw.Spec.AllowedListeners.Namespaces.From == nil {
+		gw.Spec.AllowedListeners.Namespaces.From = &from
 	}
 }
