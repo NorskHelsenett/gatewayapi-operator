@@ -10,11 +10,6 @@ import (
 func ValidateAddresses(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteAddresses := httproute.GetAnnotations()[annotations.AnnotationIPAMAddresses]
 
-	// If the HTTPRoute does not specify addresses there is nothing to conflict with.
-	if httprouteAddresses == "" {
-		return nil
-	}
-
 	if !isHTTPRouteAndGatewayAddressesMatching(httprouteAddresses, gateway) {
 		gatewayAddresses := string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses])
 		return fmt.Errorf("HTTPRoute %s annotation %q conflicts with existing Gateway %s/%s (has %q)",
@@ -35,10 +30,11 @@ func isHTTPRouteAndGatewayAddressesMatching(httprouteAddresses string, gateway *
 
 	gatewayAddresses := string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses])
 
-	// Addresses on Gateway is not set. No conflict possible.
+	// Gateway has no addresses annotation. No conflict possible.
 	if gatewayAddresses == "" {
 		return true
 	}
 
+	// Gateway has addresses set; HTTPRoute must specify the same value.
 	return gatewayAddresses == httprouteAddresses
 }
