@@ -241,21 +241,23 @@ func TestValidateAddresses_NoGateway(t *testing.T) {
 }
 
 func TestValidateAddresses_GatewayNoInfrastructure(t *testing.T) {
+	// HTTPRoute specifies addresses but the gateway has no infrastructure block -> error
 	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
 	gw := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
 		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "eg"},
 	}
-	if err := validations.ValidateAddresses(route, gw); err != nil {
-		t.Errorf("expected nil error when gateway has no infrastructure, got %v", err)
+	if err := validations.ValidateAddresses(route, gw); err == nil {
+		t.Error("expected error when route specifies addresses but gateway has no infrastructure, got nil")
 	}
 }
 
 func TestValidateAddresses_GatewayNoAddressesAnnotation(t *testing.T) {
+	// HTTPRoute specifies addresses but the gateway has no addresses annotation -> error
 	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
 	gw := newGatewayWithInfraAnn(nil)
-	if err := validations.ValidateAddresses(route, gw); err != nil {
-		t.Errorf("expected nil error when gateway has no addresses annotation, got %v", err)
+	if err := validations.ValidateAddresses(route, gw); err == nil {
+		t.Error("expected error when route specifies addresses but gateway has no addresses annotation, got nil")
 	}
 }
 

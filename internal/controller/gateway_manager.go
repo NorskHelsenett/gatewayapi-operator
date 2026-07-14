@@ -58,7 +58,8 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		return errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
 	}
 
-	// Gateway exists, validate IPAM zone and ip-family match if set
+	// Gateway exists, validate IPAM settings match
+	gatewayInfraAddresses := ""
 	if gateway.Spec.Infrastructure != nil && gateway.Spec.Infrastructure.Annotations != nil {
 		if existingZone, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
 			if string(existingZone) != ipamZone {
@@ -70,11 +71,16 @@ func (r *HTTPRouteReconciler) ensureGateway(
 				return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 			}
 		}
-		if existingAddresses, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses]; exists && existingAddresses != "" {
-			if ipamAddresses != string(existingAddresses) {
-				return errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + string(existingAddresses) + "' but HTTPRoute requires '" + ipamAddresses + "'")
-			}
+		gatewayInfraAddresses = string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses])
+	}
+	if ipamAddresses != gatewayInfraAddresses {
+		if gatewayInfraAddresses == "" {
+			return errors.NewBadRequest("HTTPRoute specifies IPAM addresses '" + ipamAddresses + "' but Gateway was not created with an addresses annotation; all routes on this gateway must omit it")
 		}
+		if ipamAddresses == "" {
+			return errors.NewBadRequest("Gateway has IPAM addresses '" + gatewayInfraAddresses + "'; all routes on this gateway must set annotation " + string(annotations.AnnotationIPAMAddresses))
+		}
+		return errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + gatewayInfraAddresses + "' but HTTPRoute requires '" + ipamAddresses + "'")
 	}
 
 	// Gateway exists and configuration matches, update listeners
@@ -145,7 +151,8 @@ func (r *HTTPRouteReconciler) createGateway(
 				return nil, errors.NewBadRequest("HTTPRoute cluster issuer mismatch: Gateway has issuer '" + existingIssuer + "' but HTTPRoute requires '" + clusterIssuer + "'")
 			}
 
-			// Validate IPAM zone and ip-family match if set
+			// Validate IPAM zone, ip-family, and addresses match
+			concurrentGatewayAddresses := ""
 			if existing.Spec.Infrastructure != nil && existing.Spec.Infrastructure.Annotations != nil {
 				if existingZone, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone]; exists {
 					if string(existingZone) != ipamZone {
@@ -157,11 +164,16 @@ func (r *HTTPRouteReconciler) createGateway(
 						return nil, errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 					}
 				}
-				if existingAddresses, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses]; exists && existingAddresses != "" {
-					if ipamAddresses != string(existingAddresses) {
-						return nil, errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + string(existingAddresses) + "' but HTTPRoute requires '" + ipamAddresses + "'")
-					}
+				concurrentGatewayAddresses = string(existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses])
+			}
+			if ipamAddresses != concurrentGatewayAddresses {
+				if concurrentGatewayAddresses == "" {
+					return nil, errors.NewBadRequest("HTTPRoute specifies IPAM addresses '" + ipamAddresses + "' but Gateway was not created with an addresses annotation; all routes on this gateway must omit it")
 				}
+				if ipamAddresses == "" {
+					return nil, errors.NewBadRequest("Gateway has IPAM addresses '" + concurrentGatewayAddresses + "'; all routes on this gateway must set annotation " + string(annotations.AnnotationIPAMAddresses))
+				}
+				return nil, errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + concurrentGatewayAddresses + "' but HTTPRoute requires '" + ipamAddresses + "'")
 			}
 
 			deleted, err := r.updateGatewayListeners(ctx, existing, gatewayNamespace)
