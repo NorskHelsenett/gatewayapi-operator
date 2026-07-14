@@ -88,6 +88,13 @@ func (v *HTTPRouteCustomValidator) ValidateCreate(ctx context.Context, httproute
 		return nil, err
 	}
 
+	// Validate that addresses are the same on HTTPRoute and Gateway
+	err = validations.ValidateAddresses(httproute, referredGateway)
+	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute creation", "name", httproute.GetName(), "reason", err.Error())
+		return nil, err
+	}
+
 	return nil, nil
 
 }
@@ -124,6 +131,13 @@ func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, _, httpro
 
 	// Validate that ip-family is the same on HTTPRoute and Gateway
 	err = validations.ValidateIPFamily(httproute, referredGateway)
+	if err != nil {
+		httproutelog.Info("Rejecting HTTPRoute update", "name", httproute.GetName(), "reason", err.Error())
+		return nil, err
+	}
+
+	// Validate that addresses are the same on HTTPRoute and Gateway
+	err = validations.ValidateAddresses(httproute, referredGateway)
 	if err != nil {
 		httproutelog.Info("Rejecting HTTPRoute update", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
