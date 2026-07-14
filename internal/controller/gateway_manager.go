@@ -70,6 +70,13 @@ func (r *HTTPRouteReconciler) ensureGateway(
 				return errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 			}
 		}
+		if ipamAddresses != "" {
+			if existingAddresses, exists := gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses]; exists {
+				if string(existingAddresses) != ipamAddresses {
+					return errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + string(existingAddresses) + "' but HTTPRoute requires '" + ipamAddresses + "'")
+				}
+			}
+		}
 	}
 
 	// Gateway exists and configuration matches, update listeners
