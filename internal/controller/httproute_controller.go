@@ -213,8 +213,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		log.V(1).Info("No cluster issuer annotation found, using default", "clusterIssuer", clusterIssuer)
 	}
 
+	// Get IPAM addresses from annotation (optional, no default)
+	ipamAddresses := httpRoute.Annotations[annotations.AnnotationIPAMAddresses]
+
 	// Ensure the Gateway exists and has correct listeners
-	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
+	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer, ipamAddresses); err != nil {
 		return ctrl.Result{}, err
 	}
 

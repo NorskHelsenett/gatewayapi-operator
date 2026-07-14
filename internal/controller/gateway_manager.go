@@ -19,6 +19,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 	ipamZone string,
 	ipFamily string,
 	clusterIssuer string,
+	ipamAddresses string,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -33,7 +34,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		if errors.IsNotFound(err) {
 			// Gateway doesn't exist, create it
 			log.Info("Creating new Gateway", "gateway", gatewayName, "namespace", gatewayNamespace)
-			created, err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer)
+			created, err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer, ipamAddresses)
 			if err != nil {
 				return err
 			}
@@ -93,6 +94,7 @@ func (r *HTTPRouteReconciler) createGateway(
 	ipamZone string,
 	ipFamily string,
 	clusterIssuer string,
+	ipamAddresses string,
 ) (*gatewayv1.Gateway, error) {
 	log := logf.FromContext(ctx)
 
@@ -114,10 +116,7 @@ func (r *HTTPRouteReconciler) createGateway(
 		Spec: gatewayv1.GatewaySpec{
 			Listeners: listeners,
 			Infrastructure: &gatewayv1.GatewayInfrastructure{
-				Annotations: map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
-					annotations.AnnotationIPAMZone: gatewayv1.AnnotationValue(ipamZone),
-					annotations.AnnotationIpFamily: gatewayv1.AnnotationValue(ipFamily),
-				},
+				Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses),
 			},
 		},
 	}
@@ -153,6 +152,13 @@ func (r *HTTPRouteReconciler) createGateway(
 						return nil, errors.NewBadRequest("HTTPRoute IPAM ip-family mismatch: Gateway has ip-family '" + string(existingFamily) + "' but HTTPRoute requires '" + ipFamily + "'")
 					}
 				}
+				if ipamAddresses != "" {
+					if existingAddresses, exists := existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMAddresses]; exists {
+						if string(existingAddresses) != ipamAddresses {
+							return nil, errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + string(existingAddresses) + "' but HTTPRoute requires '" + ipamAddresses + "'")
+						}
+					}
+				}
 			}
 
 			deleted, err := r.updateGatewayListeners(ctx, existing, gatewayNamespace)
@@ -172,4 +178,17 @@ func (r *HTTPRouteReconciler) createGateway(
 
 	log.Info("Successfully created Gateway", "gateway", gatewayName, "namespace", gatewayNamespace, "listeners", len(listeners))
 	return newGateway, nil
+}
+
+// buildInfrastructureAnnotations constructs the Gateway.Spec.Infrastructure.Annotations map.
+// ipamAddresses is optional; it is omitted when empty.
+func buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses string) map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue {
+	m := map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMZone: gatewayv1.AnnotationValue(ipamZone),
+		annotations.AnnotationIpFamily: gatewayv1.AnnotationValue(ipFamily),
+	}
+	if ipamAddresses != "" {
+		m[annotations.AnnotationIPAMAddresses] = gatewayv1.AnnotationValue(ipamAddresses)
+	}
+	return m
 }
