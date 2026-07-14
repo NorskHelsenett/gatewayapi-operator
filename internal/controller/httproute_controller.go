@@ -298,15 +298,22 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 	return nil
 }
 
-// reconcileListenerSetMode syncs the listeners of a user-defined ListenerSet based on all
-// HTTPRoutes that reference it (parentRef.kind=ListenerSet). The ListenerSet must already
-// exist — the operator never creates or deletes user-defined ListenerSets.
+// reconcileListenerSetMode ensures the default stub Gateway and a managed ListenerSet exist and
+// are up-to-date based on all HTTPRoutes that reference the ListenerSet (parentRef.kind=ListenerSet).
 func (r *HTTPRouteReconciler) reconcileListenerSetMode(
 	ctx context.Context,
 	listenerSetName, listenerSetNamespace string,
 	ipamZone, ipFamily, clusterIssuer string,
 ) error {
 	log := logf.FromContext(ctx)
+
+	gatewayName := defaultGatewayNameForZone(ipamZone)
+
+	// Ensure the parent stub Gateway exists in the dedicated gateway namespace.
+	if err := r.ensureDefaultGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer); err != nil {
+		log.Error(err, "Failed to ensure default Gateway for ListenerSet mode", "gateway", gatewayName)
+		return err
+	}
 
 	listeners, ignoreDns, overrideInfra, overrideTtl, err := r.collectListenersForListenerSet(ctx, listenerSetName, listenerSetNamespace)
 	if err != nil {
@@ -318,15 +325,15 @@ func (r *HTTPRouteReconciler) reconcileListenerSetMode(
 		return nil
 	}
 
-	if err := r.updateUserListenerSet(ctx, listenerSetName, listenerSetNamespace, listeners, ignoreDns, overrideInfra, overrideTtl, clusterIssuer); err != nil {
-		log.Error(err, "Failed to update ListenerSet", "listenerSet", listenerSetName)
+	if err := r.ensureListenerSet(ctx, listenerSetName, listenerSetNamespace, gatewayName, listeners, ignoreDns, overrideInfra, overrideTtl, clusterIssuer); err != nil {
+		log.Error(err, "Failed to ensure ListenerSet", "listenerSet", listenerSetName)
 		return err
 	}
 	return nil
 }
 
-// handleHTTPRouteDeletionListenerSet re-syncs a user-defined ListenerSet after an HTTPRoute
-// that referenced it is deleted. The ListenerSet itself is never deleted by the operator.
+// handleHTTPRouteDeletionListenerSet re-syncs the ListenerSet after an HTTPRoute that referenced
+// it is deleted.  When no routes remain the ListenerSet and the default stub Gateway are deleted.
 func (r *HTTPRouteReconciler) handleHTTPRouteDeletionListenerSet(
 	ctx context.Context,
 	listenerSetName, listenerSetNamespace string,
@@ -339,14 +346,31 @@ func (r *HTTPRouteReconciler) handleHTTPRouteDeletionListenerSet(
 	}
 
 	if len(listeners) == 0 {
-		log.Info("No routes remain for ListenerSet after deletion; leaving it unchanged (user-owned)", "listenerSet", listenerSetName)
+		log.Info("No routes remain for ListenerSet after deletion; deleting it", "listenerSet", listenerSetName)
+
+		// Determine the parent gateway before deleting the ListenerSet.
+		var ls gatewayv1.ListenerSet
+		gatewayName := ""
+		if err := r.Get(ctx, client.ObjectKey{Name: listenerSetName, Namespace: listenerSetNamespace}, &ls); err == nil {
+			gatewayName = string(ls.Spec.ParentRef.Name)
+		}
+
+		if err := r.deleteListenerSet(ctx, listenerSetName, listenerSetNamespace); err != nil {
+			return err
+		}
+
+		if gatewayName != "" {
+			if err := r.deleteDefaultGatewayIfUnused(ctx, gatewayName, gatewayNamespace); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
 	// Pass "" for clusterIssuer: on deletion we don't have a resolved issuer for the remaining
 	// routes, so preserve whatever is already on the ListenerSet. The next normal reconcile
 	// of any remaining route will write the correct value.
-	return r.updateUserListenerSet(ctx, listenerSetName, listenerSetNamespace, listeners, ignoreDns, overrideInfra, overrideTtl, "")
+	return r.ensureListenerSet(ctx, listenerSetName, listenerSetNamespace, "", listeners, ignoreDns, overrideInfra, overrideTtl, "")
 }
 
 // handleHTTPRouteDeletion updates gateway listeners when an HTTPRoute is deleted

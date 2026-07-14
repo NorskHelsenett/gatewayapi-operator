@@ -21,6 +21,7 @@ rules:
   resources:
   - gateways
   - httproutes
+  - listenersets
   verbs:
   - create
   - delete

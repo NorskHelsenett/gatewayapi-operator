@@ -40,18 +40,46 @@ const (
 
 	InetIPAMZone = "inet"
 
+	HnetIPAMZone = "hnet"
+
 	DefaultInetIpFamily = "dual"
 
 	DefaultHnetIpFamily = "ipv4"
+
+	// Default Gateway names for each IPAM zone used by auto-created ListenerSet parent Gateways.
+	defaultGatewayHnet        = "default-gateway-hnet"
+	defaultGatewayHnetPrivate = "default-gateway-hnet-private"
+	defaultGatewayInet        = "default-gateway-inet"
+
+	// placeholderListenerName is the name of the stub listener placed on a Gateway that exists
+	// solely to satisfy the Gateway API MinItems=1 requirement while real listeners live in
+	// attached ListenerSets.
+	placeholderListenerName = "placeholder"
 
 	// enableClientTrafficPolicyPQCEnvVar toggles ClientTrafficPolicy creation.
 	enableClientTrafficPolicyPQCEnvVar = "ENABLE_CLIENTTRAFFICPOLICY_PQC"
 
 	// clientTrafficPolicyNameSuffix is appended to gateway names.
 	clientTrafficPolicyNameSuffix = "-gwo-pqc"
+
+	// gatewayNamespace is the namespace where all operator-managed Gateways live.
+	gatewayNamespace = "gateways"
 )
 
 // ptr returns a pointer to the provided string
 func ptr(s string) *string {
 	return &s
+}
+
+// defaultGatewayNameForZone returns the default Gateway name that auto-created
+// ListenerSets should reference as their parent, keyed by IPAM zone.
+func defaultGatewayNameForZone(zone string) string {
+	switch zone {
+	case InetIPAMZone:
+		return defaultGatewayInet
+	case HnetIPAMZone:
+		return defaultGatewayHnet
+	default: // hnet-private and anything unrecognised
+		return defaultGatewayHnetPrivate
+	}
 }
