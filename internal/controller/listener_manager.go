@@ -297,7 +297,7 @@ func UpdateGatewayClass(gw *gatewayv1.Gateway) {
 				gw.Spec.GatewayClassName = gatewayv1.ObjectName(inetGatewayClassName)
 
 			} else {
-				// Default to hnet gwclass if zone is set, but not inetIPamZone
+				// Default to hnet gwclass if infrastructure annotations is set, but not to inet
 				gw.Spec.GatewayClassName = gatewayv1.ObjectName(hnetGatewayClassName)
 			}
 		} else {
