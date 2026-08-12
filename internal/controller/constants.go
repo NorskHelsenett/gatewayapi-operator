@@ -26,6 +26,9 @@ const (
 	// Internet gateway class
 	inetGatewayClassName = "eg-inet"
 
+	// Internet gateway class - ipv4 only
+	inetIpv4GatewayClassName = "eg-inet-ipv4"
+
 	// httpsPort is the default HTTPS port
 	httpsPort = 443
 
