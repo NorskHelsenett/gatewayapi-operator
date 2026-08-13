@@ -26,6 +26,9 @@ const (
 	// Internet gateway class
 	inetGatewayClassName = "eg-inet"
 
+	// Internet gateway class - ipv4 only
+	inetIpv4GatewayClassName = "eg-inet-ipv4"
+
 	// httpsPort is the default HTTPS port
 	httpsPort = 443
 
@@ -43,6 +46,8 @@ const (
 	DefaultInetIpFamily = "dual"
 
 	DefaultHnetIpFamily = "ipv4"
+
+	IPv4IpFamily = "ipv4"
 
 	// enableClientTrafficPolicyPQCEnvVar toggles ClientTrafficPolicy creation.
 	enableClientTrafficPolicyPQCEnvVar = "ENABLE_CLIENTTRAFFICPOLICY_PQC"

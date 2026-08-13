@@ -23,4 +23,8 @@ const (
 	AnnotationCertManagerClusterIssuer = "cert-manager.io/cluster-issuer"
 
 	AnnotationIpFamily = "ipam.vitistack.io/ip-family"
+
+	// AnnotationIPAMAddresses specifies specific IP addresses to assign via IPAM
+	// Value type: string
+	AnnotationIPAMAddresses = "ipam.vitistack.io/addresses"
 )

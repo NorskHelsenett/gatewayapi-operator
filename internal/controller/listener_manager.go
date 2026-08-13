@@ -287,10 +287,19 @@ func UpdateGatewayAnnotations(ctx context.Context, gw *gatewayv1.Gateway, ignore
 func UpdateGatewayClass(gw *gatewayv1.Gateway) {
 	// only update GatewayClass when no Class is set or when old default "eg" is used.
 	if gw.Spec.GatewayClassName == "" || gw.Spec.GatewayClassName == legacyGatewayClassName {
-		// If gateway is in InetIPAMZone we use the Inet GatewayClass
-		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.Annotations != nil &&
-			gw.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone] == InetIPAMZone {
-			gw.Spec.GatewayClassName = gatewayv1.ObjectName(inetGatewayClassName)
+		// set ipv4 only gatewayclass if ipv4 is specified on inet gateway
+		if gw.Spec.Infrastructure != nil && gw.Spec.Infrastructure.Annotations != nil {
+			if gw.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone] == InetIPAMZone &&
+				gw.Spec.Infrastructure.Annotations[annotations.AnnotationIpFamily] == IPv4IpFamily {
+				gw.Spec.GatewayClassName = gatewayv1.ObjectName(inetIpv4GatewayClassName)
+
+			} else if gw.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone] == InetIPAMZone {
+				gw.Spec.GatewayClassName = gatewayv1.ObjectName(inetGatewayClassName)
+
+			} else {
+				// Default to hnet gwclass if infrastructure annotations is set, but not to inet
+				gw.Spec.GatewayClassName = gatewayv1.ObjectName(hnetGatewayClassName)
+			}
 		} else {
 			// Use Hnet gatewayclass if AnnotationIPAMZone is not InetIPAMZone
 			gw.Spec.GatewayClassName = gatewayv1.ObjectName(hnetGatewayClassName)

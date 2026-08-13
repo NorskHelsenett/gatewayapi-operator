@@ -210,3 +210,73 @@ func TestValidateIpfamily_Mismatch(t *testing.T) {
 		t.Error("expected error for ip-family mismatch, got nil")
 	}
 }
+
+// ---- ValidateAddresses ----
+
+func TestValidateAddresses_NoAnnotationOnRoute(t *testing.T) {
+	// Gateway has addresses set; route without the annotation must be rejected
+	route := newHTTProute(nil)
+	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMAddresses: "192.168.1.100",
+	})
+	if err := validations.ValidateAddresses(route, gw); err == nil {
+		t.Error("expected error when gateway has addresses but route does not, got nil")
+	}
+}
+
+func TestValidateAddresses_NoAnnotationOnRouteNoGatewayAnnotation(t *testing.T) {
+	// Neither route nor gateway has addresses set -> no conflict
+	route := newHTTProute(nil)
+	gw := newGatewayWithInfraAnn(nil)
+	if err := validations.ValidateAddresses(route, gw); err != nil {
+		t.Errorf("expected nil error when neither route nor gateway has addresses, got %v", err)
+	}
+}
+
+func TestValidateAddresses_NoGateway(t *testing.T) {
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
+	if err := validations.ValidateAddresses(route, nil); err != nil {
+		t.Errorf("expected nil error with no gateway, got %v", err)
+	}
+}
+
+func TestValidateAddresses_GatewayNoInfrastructure(t *testing.T) {
+	// HTTPRoute specifies addresses but the gateway has no infrastructure block -> error
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "eg"},
+	}
+	if err := validations.ValidateAddresses(route, gw); err == nil {
+		t.Error("expected error when route specifies addresses but gateway has no infrastructure, got nil")
+	}
+}
+
+func TestValidateAddresses_GatewayNoAddressesAnnotation(t *testing.T) {
+	// HTTPRoute specifies addresses but the gateway has no addresses annotation -> error
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
+	gw := newGatewayWithInfraAnn(nil)
+	if err := validations.ValidateAddresses(route, gw); err == nil {
+		t.Error("expected error when route specifies addresses but gateway has no addresses annotation, got nil")
+	}
+}
+
+func TestValidateAddresses_Matching(t *testing.T) {
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
+	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMAddresses: "192.168.1.100",
+	})
+	if err := validations.ValidateAddresses(route, gw); err != nil {
+		t.Errorf("expected nil error for matching addresses, got %v", err)
+	}
+}
+
+func TestValidateAddresses_Mismatch(t *testing.T) {
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMAddresses: "192.168.1.100"})
+	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMAddresses: "10.0.0.5",
+	})
+	if err := validations.ValidateAddresses(route, gw); err == nil {
+		t.Error("expected error for addresses mismatch, got nil")
+	}
+}
