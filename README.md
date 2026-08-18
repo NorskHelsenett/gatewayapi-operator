@@ -9,7 +9,7 @@ Automatically manages Gateway resources based on HTTPRoute configurations.
 
 ## How It Works
 1. HTTPRoutes with `gatewayapi-operator.vitistack.io/enabled: "true"` annotation are watched
-2. Gateway is created/updated with HTTPS listeners for each hostname in the HTTPRoute
+2. Gateway is created/updated with HTTPS listeners for each hostname in the HTTPRoute. It is named after the parentRef.name in the HTTPRoute.
 3. Listeners reference TLS certificates in format: `{hostname}-tls`
 4. Gateway is deleted when no HTTPRoutes reference it anymore
 
@@ -32,7 +32,7 @@ httproute.gateway.networking.k8s.io/operator2-test-https created
 
 ❯ k get gateway -A
 NAMESPACE   NAME                CLASS   ADDRESS   PROGRAMMED   AGE
-argocd      hnet-private-argo   eg                False        3s
+argocd      hnet-private-argo   eg                True         3s
 
 ❯ k get gateway -A -o yaml | grep allowedRoutes -A 10
     - allowedRoutes:
@@ -51,13 +51,16 @@ argocd      hnet-private-argo   eg                False        3s
 ## Configuration
 
 ### HTTPRoute Annotations
-- `gatewayapi-operator.vitistack.io/enabled: 'true'` - Required to enable operator management
-- `gatewayapi-operator.vitistack.io/cluster-issuer` - cert-manager cluster issuer (default: `internpki`)
-- `ipam.vitistack.io/zone` - IPAM zone for gateway (default: `hnet-private`)
-- `ipam.vitistack.io/address: '<ip-address>'` - Request a specific IP-adress. Will be mirrored in the gateways spec.infrastructure.annotations field.
-- `dns.nhn.no/ignore: 'true'"` - Set to "true" to stop updates of DNS for this HTTPRoute
-- `dns.nhn.no/override-infrastructure: '{"infrastructure":["<infrastructure>"]}'` - Specify which DNS-infrastructure DNS updates for this HTTPRoute will be done.
-- `dns.nhn.no/override-ttl: '<number of seconds>'` - Override the default TTL for the DNS-zone
+
+| Annotation | Description | Mirrored to gateway? |Default on gateway if not specified |
+|---|---|---|---|
+| `gatewayapi-operator.vitistack.io/enabled` | Required to enable operator management | No | Not applied |
+| `gatewayapi-operator.vitistack.io/cluster-issuer` | cert-manager cluster issuer | Yes | `internpki` |
+| `ipam.vitistack.io/zone` | IPAM zone for the gateway | Yes | `hnet-private` |
+| `ipam.vitistack.io/address` | Request a specific IP address. Mirrored to the gateway's `spec.infrastructure.annotations` | Yes | Not applied |
+| `dns.nhn.no/ignore` | Set to `"true"` to stop DNS updates for this HTTPRoute | Yes | Not applied |
+| `dns.nhn.no/override-infrastructure` | JSON specifying which DNS infrastructure to use, e.g. `'{"infrastructure":["<infrastructure>"]}'` | Yes | Not applied |
+| `dns.nhn.no/override-ttl` | Override the default TTL for the DNS zone (seconds) | Yes | Not applied |
 
 
 
@@ -90,7 +93,7 @@ spec:
 ```
 
 
-## Be aware
+## Limitations
 1. Multiple httproutes with differemt cluster-issuer annotation referencing the same gateway is not possible. Create a new gateway per cluster-issuer
 2. Multiple httproutes with different ipam.vitistack.io/zone annotation is not possible. Create a new gateway per IPAM zone.
 3. Redirect and BackendTLSPolicy must be configured manually. It is not supported yet.
