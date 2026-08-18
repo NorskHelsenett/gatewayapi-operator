@@ -51,9 +51,16 @@ argocd      hnet-private-argo   eg                False        3s
 ## Configuration
 
 ### HTTPRoute Annotations
-- `gatewayapi-operator.vitistack.io/enabled: "true"` - Required to enable operator management
+- `gatewayapi-operator.vitistack.io/enabled: 'true'` - Required to enable operator management
 - `gatewayapi-operator.vitistack.io/cluster-issuer` - cert-manager cluster issuer (default: `internpki`)
 - `ipam.vitistack.io/zone` - IPAM zone for gateway (default: `hnet-private`)
+- `ipam.vitistack.io/address: '<ip-address>'` - Request a specific IP-adress. Will be mirrored in the gateways spec.infrastructure.annotations field.
+- `dns.nhn.no/ignore: 'true'"` - Set to "true" to stop updates of DNS for this HTTPRoute
+- `dns.nhn.no/override-infrastructure: '{"infrastructure":["<infrastructure>"]}'` - Specify which DNS-infrastructure DNS updates for this HTTPRoute will be done.
+- `dns.nhn.no/override-ttl: '<number of seconds>'` - Override the default TTL for the DNS-zone
+
+
+
 
 ### Argocd Project:
 ```
@@ -80,7 +87,7 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-````
+```
 
 
 ## Be aware
