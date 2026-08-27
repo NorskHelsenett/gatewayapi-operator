@@ -280,3 +280,70 @@ func TestValidateAddresses_Mismatch(t *testing.T) {
 		t.Error("expected error for addresses mismatch, got nil")
 	}
 }
+
+// ---- ValidateRetentionPeriod ----
+
+func TestValidateRetentionPeriod_NeitherSet(t *testing.T) {
+	if err := validations.ValidateRetentionPeriod(newHTTProute(nil), newGatewayWithInfraAnn(nil)); err != nil {
+		t.Errorf("expected nil error when neither route nor gateway sets retention, got %v", err)
+	}
+}
+
+func TestValidateRetentionPeriod_NoGateway(t *testing.T) {
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: "30"})
+	if err := validations.ValidateRetentionPeriod(route, nil); err != nil {
+		t.Errorf("expected nil error with no gateway, got %v", err)
+	}
+}
+
+func TestValidateRetentionPeriod_RouteSetGatewayNone(t *testing.T) {
+	// Retention period only matters at deletion — route can set it even if gateway doesn't have it yet
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: "30"})
+	gw := newGatewayWithInfraAnn(nil)
+	if err := validations.ValidateRetentionPeriod(route, gw); err != nil {
+		t.Errorf("expected nil error when route sets retention but gateway does not, got %v", err)
+	}
+}
+
+func TestValidateRetentionPeriod_RouteSetGatewayNoInfrastructure(t *testing.T) {
+	// Route can set retention even when gateway has no infrastructure block
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: "30"})
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+		Spec:       gatewayv1.GatewaySpec{GatewayClassName: "eg"},
+	}
+	if err := validations.ValidateRetentionPeriod(route, gw); err != nil {
+		t.Errorf("expected nil error when route sets retention but gateway has no infrastructure, got %v", err)
+	}
+}
+
+func TestValidateRetentionPeriod_GatewaySetRouteNone(t *testing.T) {
+	// Route without retention is allowed on a gateway that already has it
+	route := newHTTProute(nil)
+	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMRetentionPeriodDays: "30",
+	})
+	if err := validations.ValidateRetentionPeriod(route, gw); err != nil {
+		t.Errorf("expected nil error when gateway sets retention but route does not, got %v", err)
+	}
+}
+
+func TestValidateRetentionPeriod_Matching(t *testing.T) {
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: "30"})
+	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMRetentionPeriodDays: "30",
+	})
+	if err := validations.ValidateRetentionPeriod(route, gw); err != nil {
+		t.Errorf("expected nil error for matching retention period, got %v", err)
+	}
+}
+
+func TestValidateRetentionPeriod_Mismatch(t *testing.T) {
+	route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: "30"})
+	gw := newGatewayWithInfraAnn(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		annotations.AnnotationIPAMRetentionPeriodDays: "90",
+	})
+	if err := validations.ValidateRetentionPeriod(route, gw); err == nil {
+		t.Error("expected error for retention period mismatch, got nil")
+	}
+}

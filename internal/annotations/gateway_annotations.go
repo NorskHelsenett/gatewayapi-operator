@@ -27,4 +27,8 @@ const (
 	// AnnotationIPAMAddresses specifies specific IP addresses to assign via IPAM
 	// Value type: string
 	AnnotationIPAMAddresses = "ipam.vitistack.io/addresses"
+
+	// AnnotationIPAMRetentionPeriodDays specifies how many days the IPAM lease is retained after the gateway is deleted
+	// Value type: integer (as string)
+	AnnotationIPAMRetentionPeriodDays = "ipam.vitistack.io/retention-period-days"
 )

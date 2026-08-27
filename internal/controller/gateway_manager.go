@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -20,6 +21,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 	ipFamily string,
 	clusterIssuer string,
 	ipamAddresses string,
+	ipamRetentionPeriodDays string,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -34,7 +36,7 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		if errors.IsNotFound(err) {
 			// Gateway doesn't exist, create it
 			log.Info("Creating new Gateway", "gateway", gatewayName, "namespace", gatewayNamespace)
-			created, err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer, ipamAddresses)
+			created, err := r.createGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer, ipamAddresses, ipamRetentionPeriodDays)
 			if err != nil {
 				return err
 			}
@@ -83,6 +85,15 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		return errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + gatewayInfraAddresses + "' but HTTPRoute requires '" + ipamAddresses + "'")
 	}
 
+	gatewayInfraRetention := ""
+	if gateway.Spec.Infrastructure != nil && gateway.Spec.Infrastructure.Annotations != nil {
+		gatewayInfraRetention = string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMRetentionPeriodDays])
+	}
+	// Only reject if both sides specify a value and they differ.
+	if ipamRetentionPeriodDays != "" && gatewayInfraRetention != "" && ipamRetentionPeriodDays != gatewayInfraRetention {
+		return errors.NewBadRequest("HTTPRoute IPAM retention-period-days mismatch: Gateway has '" + gatewayInfraRetention + "' but HTTPRoute requires '" + ipamRetentionPeriodDays + "'")
+	}
+
 	// Gateway exists and configuration matches, update listeners
 	log.V(1).Info("Gateway exists, updating listeners", "gateway", gatewayName, "namespace", gatewayNamespace)
 	deleted, err := r.updateGatewayListeners(ctx, gateway, gatewayNamespace)
@@ -93,6 +104,24 @@ func (r *HTTPRouteReconciler) ensureGateway(
 		// Gateway (and its CTP) were deleted because no listeners remain; nothing more to do.
 		return nil
 	}
+
+	// Patch infra annotations if retention period was added or changed.
+	if ipamRetentionPeriodDays != "" && ipamRetentionPeriodDays != gatewayInfraRetention {
+		infraPatch := &gatewayv1.Gateway{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway"},
+			ObjectMeta: metav1.ObjectMeta{Name: gatewayName, Namespace: gatewayNamespace},
+			Spec: gatewayv1.GatewaySpec{
+				Infrastructure: &gatewayv1.GatewayInfrastructure{
+					Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays),
+				},
+			},
+		}
+		if patchErr := r.Patch(ctx, infraPatch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator")); patchErr != nil {
+			return patchErr
+		}
+		log.Info("Updated Gateway retention-period-days", "gateway", gatewayName, "retentionPeriodDays", ipamRetentionPeriodDays)
+	}
+
 	return r.ensureClientTrafficPolicy(ctx, gateway)
 }
 
@@ -106,6 +135,7 @@ func (r *HTTPRouteReconciler) createGateway(
 	ipFamily string,
 	clusterIssuer string,
 	ipamAddresses string,
+	ipamRetentionPeriodDays string,
 ) (*gatewayv1.Gateway, error) {
 	log := logf.FromContext(ctx)
 
@@ -127,7 +157,7 @@ func (r *HTTPRouteReconciler) createGateway(
 		Spec: gatewayv1.GatewaySpec{
 			Listeners: listeners,
 			Infrastructure: &gatewayv1.GatewayInfrastructure{
-				Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses),
+				Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays),
 			},
 		},
 	}
@@ -176,6 +206,14 @@ func (r *HTTPRouteReconciler) createGateway(
 				return nil, errors.NewBadRequest("HTTPRoute IPAM addresses mismatch: Gateway has addresses '" + concurrentGatewayAddresses + "' but HTTPRoute requires '" + ipamAddresses + "'")
 			}
 
+			concurrentGatewayRetention := ""
+			if existing.Spec.Infrastructure != nil && existing.Spec.Infrastructure.Annotations != nil {
+				concurrentGatewayRetention = string(existing.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMRetentionPeriodDays])
+			}
+			if ipamRetentionPeriodDays != "" && concurrentGatewayRetention != "" && ipamRetentionPeriodDays != concurrentGatewayRetention {
+				return nil, errors.NewBadRequest("HTTPRoute IPAM retention-period-days mismatch: Gateway has '" + concurrentGatewayRetention + "' but HTTPRoute requires '" + ipamRetentionPeriodDays + "'")
+			}
+
 			deleted, err := r.updateGatewayListeners(ctx, existing, gatewayNamespace)
 			if err != nil {
 				return nil, err
@@ -197,13 +235,16 @@ func (r *HTTPRouteReconciler) createGateway(
 
 // buildInfrastructureAnnotations constructs the Gateway.Spec.Infrastructure.Annotations map.
 // ipamAddresses is optional; it is omitted when empty.
-func buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses string) map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue {
+func buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays string) map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue {
 	m := map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
 		annotations.AnnotationIPAMZone: gatewayv1.AnnotationValue(ipamZone),
 		annotations.AnnotationIpFamily: gatewayv1.AnnotationValue(ipFamily),
 	}
 	if ipamAddresses != "" {
 		m[annotations.AnnotationIPAMAddresses] = gatewayv1.AnnotationValue(ipamAddresses)
+	}
+	if ipamRetentionPeriodDays != "" {
+		m[annotations.AnnotationIPAMRetentionPeriodDays] = gatewayv1.AnnotationValue(ipamRetentionPeriodDays)
 	}
 	return m
 }
