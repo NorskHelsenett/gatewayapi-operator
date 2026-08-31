@@ -2,6 +2,7 @@ package validations
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -9,6 +10,13 @@ import (
 
 func ValidateRetentionPeriod(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteRetention := httproute.GetAnnotations()[annotations.AnnotationIPAMRetentionPeriodDays]
+
+	if httprouteRetention != "" {
+		if _, err := strconv.ParseInt(httprouteRetention, 10, 32); err != nil {
+			return fmt.Errorf("HTTPRoute %s annotation %q is not a supported integer",
+				annotations.AnnotationIPAMRetentionPeriodDays, httprouteRetention)
+		}
+	}
 
 	if !isHTTPRouteAndGatewayRetentionMatching(httprouteRetention, gateway) {
 		gatewayRetention := string(gateway.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMRetentionPeriodDays])
