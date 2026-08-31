@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -107,16 +107,20 @@ func (r *HTTPRouteReconciler) ensureGateway(
 
 	// Patch infra annotations if retention period was added or changed.
 	if ipamRetentionPeriodDays != "" && ipamRetentionPeriodDays != gatewayInfraRetention {
-		infraPatch := &gatewayv1.Gateway{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway"},
-			ObjectMeta: metav1.ObjectMeta{Name: gatewayName, Namespace: gatewayNamespace},
-			Spec: gatewayv1.GatewaySpec{
-				Infrastructure: &gatewayv1.GatewayInfrastructure{
-					Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays),
-				},
-			},
-		}
-		if patchErr := r.Patch(ctx, infraPatch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator")); patchErr != nil {
+		if patchErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &gatewayv1.Gateway{}
+			if getErr := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, latest); getErr != nil {
+				return getErr
+			}
+			if latest.Spec.Infrastructure == nil {
+				latest.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
+			}
+			if latest.Spec.Infrastructure.Annotations == nil {
+				latest.Spec.Infrastructure.Annotations = map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{}
+			}
+			latest.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMRetentionPeriodDays] = gatewayv1.AnnotationValue(ipamRetentionPeriodDays)
+			return r.Update(ctx, latest)
+		}); patchErr != nil {
 			return patchErr
 		}
 		log.Info("Updated Gateway retention-period-days", "gateway", gatewayName, "retentionPeriodDays", ipamRetentionPeriodDays)
