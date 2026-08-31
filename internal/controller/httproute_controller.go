@@ -216,8 +216,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Get IPAM addresses from annotation (optional, no default)
 	ipamAddresses := httpRoute.Annotations[annotations.AnnotationIPAMAddresses]
 
+	// Get IPAM retention period from annotation (optional, no default)
+	ipamRetentionPeriodDays := httpRoute.Annotations[annotations.AnnotationIPAMRetentionPeriodDays]
+
 	// Ensure the Gateway exists and has correct listeners
-	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer, ipamAddresses); err != nil {
+	if err := r.ensureGateway(ctx, gatewayName, gatewayNamespace, ipamZone, ipFamily, clusterIssuer, ipamAddresses, ipamRetentionPeriodDays); err != nil {
 		return ctrl.Result{}, err
 	}
 
