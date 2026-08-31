@@ -296,6 +296,15 @@ func TestValidateRetentionPeriod_NoGateway(t *testing.T) {
 	}
 }
 
+func TestValidateRetentionPeriod_InvalidValue(t *testing.T) {
+	for _, value := range []string{"abc", "2147483648"} {
+		route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: value})
+		if err := validations.ValidateRetentionPeriod(route, nil); err == nil {
+			t.Errorf("expected error for invalid retention period %q, got nil", value)
+		}
+	}
+}
+
 func TestValidateRetentionPeriod_RouteSetGatewayNone(t *testing.T) {
 	// Retention period only matters at deletion — route can set it even if gateway doesn't have it yet
 	route := newHTTProute(map[string]string{annotations.AnnotationIPAMRetentionPeriodDays: "30"})
