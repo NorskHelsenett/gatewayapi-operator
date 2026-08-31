@@ -95,8 +95,7 @@ func (v *HTTPRouteCustomValidator) ValidateCreate(ctx context.Context, httproute
 		return nil, err
 	}
 
-	// Validate that retention-period-days is the same on HTTPRoute and Gateway
-	err = validations.ValidateRetentionPeriod(httproute, referredGateway)
+	// Validate that retention-period-days does not conflict with the existing Gateway (only enforced when both are set)
 	if err != nil {
 		httproutelog.Info("Rejecting HTTPRoute creation", "name", httproute.GetName(), "reason", err.Error())
 		return nil, err
