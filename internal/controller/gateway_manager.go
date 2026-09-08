@@ -107,22 +107,11 @@ func (r *HTTPRouteReconciler) ensureGateway(
 
 	// Patch infra annotations if retention period was added or changed.
 	if ipamRetentionPeriodDays != "" && ipamRetentionPeriodDays != gatewayInfraRetention {
-		if patchErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latest := &gatewayv1.Gateway{}
-			if getErr := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, latest); getErr != nil {
-				return getErr
-			}
-			if latest.Spec.Infrastructure == nil {
-				latest.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
-			}
-			if latest.Spec.Infrastructure.Annotations == nil {
-				latest.Spec.Infrastructure.Annotations = map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{}
-			}
-			latest.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMRetentionPeriodDays] = gatewayv1.AnnotationValue(ipamRetentionPeriodDays)
-			return r.Update(ctx, latest)
-		}); patchErr != nil {
+		updated, patchErr := r.updateGatewayRetentionPeriod(ctx, gatewayName, gatewayNamespace, ipamRetentionPeriodDays)
+		if patchErr != nil {
 			return patchErr
 		}
+		gateway = updated
 		log.Info("Updated Gateway retention-period-days", "gateway", gatewayName, "retentionPeriodDays", ipamRetentionPeriodDays)
 	}
 
@@ -227,6 +216,14 @@ func (r *HTTPRouteReconciler) createGateway(
 				// that no further CTP work is needed.
 				return nil, nil
 			}
+			if ipamRetentionPeriodDays != "" && concurrentGatewayRetention != ipamRetentionPeriodDays {
+				updated, patchErr := r.updateGatewayRetentionPeriod(ctx, gatewayName, gatewayNamespace, ipamRetentionPeriodDays)
+				if patchErr != nil {
+					return nil, patchErr
+				}
+				log.Info("Updated Gateway retention-period-days after concurrent create", "gateway", gatewayName, "retentionPeriodDays", ipamRetentionPeriodDays)
+				return updated, nil
+			}
 			return existing, nil
 		}
 		log.Error(err, "Failed to create Gateway", "gateway", gatewayName)
@@ -235,6 +232,36 @@ func (r *HTTPRouteReconciler) createGateway(
 
 	log.Info("Successfully created Gateway", "gateway", gatewayName, "namespace", gatewayNamespace, "listeners", len(listeners))
 	return newGateway, nil
+}
+
+func (r *HTTPRouteReconciler) updateGatewayRetentionPeriod(
+	ctx context.Context,
+	gatewayName, gatewayNamespace string,
+	ipamRetentionPeriodDays string,
+) (*gatewayv1.Gateway, error) {
+	updated := &gatewayv1.Gateway{}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &gatewayv1.Gateway{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: gatewayNamespace}, latest); getErr != nil {
+			return getErr
+		}
+		if latest.Spec.Infrastructure == nil {
+			latest.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
+		}
+		if latest.Spec.Infrastructure.Annotations == nil {
+			latest.Spec.Infrastructure.Annotations = map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{}
+		}
+		latest.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMRetentionPeriodDays] = gatewayv1.AnnotationValue(ipamRetentionPeriodDays)
+		if updateErr := r.Update(ctx, latest); updateErr != nil {
+			return updateErr
+		}
+		updated = latest
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
 }
 
 // buildInfrastructureAnnotations constructs the Gateway.Spec.Infrastructure.Annotations map.
