@@ -1,6 +1,6 @@
 module github.com/NorskHelsenett/gatewayapi-operator
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/envoyproxy/gateway v1.9.1
