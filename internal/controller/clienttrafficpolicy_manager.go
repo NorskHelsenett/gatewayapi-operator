@@ -87,6 +87,9 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 					ECDHCurves: clientTrafficPolicyPQCECDHCurves,
 				},
 			},
+			ClientIPDetection: &egv1a1.ClientIPDetectionSettings{
+				DirectSourceIP: &egv1a1.DirectSourceIPSettings{},
+			},
 		},
 	}
 
