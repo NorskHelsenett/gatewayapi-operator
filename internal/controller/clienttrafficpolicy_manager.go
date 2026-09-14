@@ -87,6 +87,9 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 					ECDHCurves: clientTrafficPolicyPQCECDHCurves,
 				},
 			},
+			ClientIPDetection: &egv1a1.ClientIPDetectionSettings{
+				DirectSourceIP: &egv1a1.DirectSourceIPSettings{},
+			},
 		},
 	}
 
@@ -129,11 +132,13 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		return nil
 	}
 
-	// Already exists – update if ECDH curves, target references, or OwnerReference differ.
+	// Already exists – update if the desired spec or OwnerReference differs.
 	ownerRefMissing := !hasControllerOwnerRef(existing, gateway.UID)
 	specUpToDate := existing.Spec.TLS != nil &&
 		stringSlicesEqual(existing.Spec.TLS.ECDHCurves, clientTrafficPolicyPQCECDHCurves) &&
-		targetRefsEqual(existing.Spec.PolicyTargetReferences.TargetRefs, desired.Spec.PolicyTargetReferences.TargetRefs)
+		targetRefsEqual(existing.Spec.PolicyTargetReferences.TargetRefs, desired.Spec.PolicyTargetReferences.TargetRefs) &&
+		existing.Spec.ClientIPDetection != nil &&
+		existing.Spec.ClientIPDetection.DirectSourceIP != nil
 	if !ownerRefMissing && specUpToDate {
 		log.V(1).Info("ClientTrafficPolicy up-to-date, skipping update", "name", ctpName)
 		return nil
@@ -147,6 +152,7 @@ func (r *HTTPRouteReconciler) ensureClientTrafficPolicy(
 		}
 		latest.Spec.TLS = desired.Spec.TLS
 		latest.Spec.PolicyTargetReferences = desired.Spec.PolicyTargetReferences
+		latest.Spec.ClientIPDetection = desired.Spec.ClientIPDetection
 		if !hasControllerOwnerRef(latest, gateway.UID) {
 			if err := controllerutil.SetControllerReference(gateway, latest, r.Scheme); err != nil {
 				// AlreadyOwnedError is not a conflict; RetryOnConflict will not retry it.
