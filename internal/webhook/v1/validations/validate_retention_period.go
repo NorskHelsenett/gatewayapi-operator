@@ -8,13 +8,21 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// MaxRetentionPeriodDays is the highest value allowed for the retention-period-days annotation.
+const MaxRetentionPeriodDays = 30
+
 func ValidateRetentionPeriod(httproute *gatewayv1.HTTPRoute, gateway *gatewayv1.Gateway) error {
 	httprouteRetention := httproute.GetAnnotations()[annotations.AnnotationIPAMRetentionPeriodDays]
 
 	if httprouteRetention != "" {
-		if _, err := strconv.ParseInt(httprouteRetention, 10, 32); err != nil {
+		value, err := strconv.ParseInt(httprouteRetention, 10, 32)
+		if err != nil {
 			return fmt.Errorf("HTTPRoute %s annotation %q is not a supported integer",
 				annotations.AnnotationIPAMRetentionPeriodDays, httprouteRetention)
+		}
+		if value > MaxRetentionPeriodDays {
+			return fmt.Errorf("HTTPRoute %s annotation %q exceeds the maximum allowed value of %d",
+				annotations.AnnotationIPAMRetentionPeriodDays, httprouteRetention, MaxRetentionPeriodDays)
 		}
 	}
 
