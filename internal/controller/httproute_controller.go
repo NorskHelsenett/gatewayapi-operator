@@ -6,6 +6,7 @@ import (
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,7 +19,10 @@ import (
 // HTTPRouteReconciler reconciles a HTTPRoute object
 type HTTPRouteReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder events.EventRecorder
+	// EnvoyPodAnnotations are the HTTPRoute annotation keys copied to Gateway.spec.infrastructure.annotations.
+	EnvoyPodAnnotations []string
 }
 
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
@@ -26,6 +30,7 @@ type HTTPRouteReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=clienttrafficpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -266,54 +271,12 @@ func (r *HTTPRouteReconciler) updateOldGateway(ctx context.Context, gatewayRef s
 		return err
 	}
 
-	// Collect listeners for the old gateway (excluding routes that no longer reference it)
-	listeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
-	if err != nil {
+	// Deletes the gateway when no routes remain, otherwise updates it with retry on conflict
+	if _, err := r.updateGatewayListeners(ctx, &gateway, gatewayNamespace); err != nil {
 		return err
 	}
 
-	// If no listeners remain, delete the gateway instead of updating with empty listeners
-	if len(listeners) == 0 {
-		log.Info("No HTTPRoutes reference this gateway anymore, deleting it", "gateway", gatewayRef)
-		if err := r.Delete(ctx, &gateway); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return err
-			}
-			log.Info("Old gateway already deleted (concurrent deletion)", "gateway", gatewayRef)
-		} else {
-			log.Info("Deleted old gateway", "gateway", gatewayRef)
-		}
-		if err := r.deleteClientTrafficPolicy(ctx, gatewayName, gatewayNamespace); err != nil {
-			log.Error(err, "Failed to delete ClientTrafficPolicy for old gateway", "gateway", gatewayRef)
-			return err
-		}
-		return nil
-	}
-
-	// Use Server-Side Apply to update listeners
-	// Include gatewayClassName since it's a required field
-	patch := &gatewayv1.Gateway{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1",
-			Kind:       "Gateway",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      gatewayName,
-			Namespace: gatewayNamespace,
-		},
-		Spec: gatewayv1.GatewaySpec{
-			GatewayClassName: gateway.Spec.GatewayClassName,
-			Listeners:        listeners,
-		},
-	}
-	UpdateGatewayAnnotations(ctx, patch, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
-
-	err = r.Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("gatewayapi-operator"))
-	if err != nil {
-		return err
-	}
-
-	log.Info("Updated old gateway listeners", "gateway", gatewayRef, "listeners", len(listeners))
+	log.Info("Updated old gateway", "gateway", gatewayRef)
 	return nil
 }
 

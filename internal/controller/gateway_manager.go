@@ -133,7 +133,7 @@ func (r *HTTPRouteReconciler) createGateway(
 	log := logf.FromContext(ctx)
 
 	// Collect all listeners from HTTPRoutes that reference this gateway
-	listeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	listeners, envoyPodAnnotations, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		log.Error(err, "Failed to collect listeners for new Gateway")
 		return nil, err
@@ -150,7 +150,7 @@ func (r *HTTPRouteReconciler) createGateway(
 		Spec: gatewayv1.GatewaySpec{
 			Listeners: listeners,
 			Infrastructure: &gatewayv1.GatewayInfrastructure{
-				Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays),
+				Annotations: syncEnvoyPodAnnotations(r.EnvoyPodAnnotations, buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays), envoyPodAnnotations),
 			},
 		},
 	}
