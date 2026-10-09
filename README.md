@@ -62,6 +62,25 @@ argocd      hnet-private-argo   eg                True         3s
 | `dns.nhn.no/override-infrastructure` | JSON specifying which DNS infrastructure to use, e.g. `'{"infrastructure":["<infrastructure>"]}'` | Yes | Not applied |
 | `dns.nhn.no/override-ttl` | Override the default TTL for the DNS zone (seconds) | Yes | Not applied |
 
+### Annotations on the Envoy pods
+Up to eight HTTPRoute annotations can be mirrored to the gateway's `spec.infrastructure.annotations`, which
+Envoy Gateway puts on the shared Envoy pods. The keys are configured with the Helm value `envoy.podAnnotations`
+(operator flag `--envoy-pod-annotations`). By default no annotations are mirrored. Only exact keys are
+supported, not prefixes, and `ipam.vitistack.io/` keys are reserved. All routes on a gateway must use the same
+value for a key, and changing a value restarts the gateway's Envoy pods.
+
+The operator refuses to start if more than 8 keys are configured. Gateway API allows at most 16 entries in
+`spec.infrastructure.annotations`, and the operator uses up to 4 of them for IPAM (`zone`, `ip-family`,
+`addresses`, `retention-period-days`). That leaves a technical ceiling of 12; the limit of 8 keeps a margin
+below it so new IPAM settings can be added without Gateway updates being rejected.
+
+```yaml
+envoy:
+  podAnnotations:
+    - nhn.no/splunkIndex
+    - nhn.no/splunkSourcetype
+```
+
 
 
 

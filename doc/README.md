@@ -38,6 +38,31 @@ spec:
             value: /
 ```
 
+### Annoteringer på Envoy-poddene
+Operatoren kan kopiere inntil åtte annoteringer fra HTTPRoute til `Gateway.spec.infrastructure.annotations`,
+og Envoy Gateway legger dem på Envoy-poddene. Hvilke nøkler dette gjelder, bestemmes av plattformteamet med
+Helm-verdien `envoy.podAnnotations`. Som standard kopieres ingen annoteringer. Bare eksakte nøkler støttes,
+ikke prefiks som `nhn.no/`.
+
+Operatoren starter ikke hvis flere enn 8 nøkler er konfigurert. Gateway API tillater maks 16 annoteringer i
+`spec.infrastructure.annotations`, og operatoren bruker opptil 4 av dem til IPAM. Det gir et teknisk tak på 12.
+Grensen på 8 gir margin, slik at nye IPAM-innstillinger kan legges til uten at Gateway-oppdateringer avvises.
+
+Eksempel der plattformteamet har konfigurert `nhn.no/splunkIndex` og `nhn.no/splunkSourcetype`:
+```yaml
+metadata:
+  annotations:
+    gatewayapi-operator.vitistack.io/enabled: "true"
+    nhn.no/splunkIndex: <splunk index>
+    nhn.no/splunkSourcetype: <splunk sourcetype>
+```
+
+- Envoy-poddene deles av alle HTTPRoutes på samme Gateway. Verdien gjelder derfor for all trafikk gjennom Gatewayen, også for routes som ikke setter annoteringen.
+- Alle routes på samme Gateway som setter en annotering, må bruke samme verdi. En ny route med en annen verdi avvises av webhooken.
+- Dersom en konflikt likevel oppstår, brukes verdien fra den eldste routen. Den nyere routen får en Warning-event (`kubectl describe httproute <navn>`).
+- Endring av verdien fører til en rolling restart av Envoy-poddene for Gatewayen.
+- Operatoren eier de konfigurerte nøklene på Gatewayen. Verdier satt manuelt der blir overskrevet eller fjernet.
+
 ### Gateway organisering
 Det anbefales å benytte samme gateway på tvers av HTTPRoutene i clusteret. Dette sparer allokering av IP-adresser
 
@@ -63,6 +88,22 @@ Dersom du ikke ønsker å benytte gatewayapi-operatoren for automatisk konfigura
 ```yaml
 gatewayapi-operator.vitistack.io/enabled: "true"
 ``` 
+
+Annoteringer for Envoy-poddene på HTTPRoute har da ingen effekt. Sett dem i stedet direkte på Gatewayen. Envoy Gateway legger `spec.infrastructure.annotations` på Envoy-poddene uavhengig av operatoren:
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: <navn>
+  namespace: <namespace>
+spec:
+  infrastructure:
+    annotations:
+      nhn.no/splunkIndex: <splunk index>
+      nhn.no/splunkSourcetype: <splunk sourcetype>
+```
+
+Ikke la HTTPRoutes med `gatewayapi-operator.vitistack.io/enabled: "true"` peke på en manuelt opprettet Gateway. Da tar operatoren over listeners og de konfigurerte Envoy-pod-annoteringene på Gatewayen, eller reconcile feiler dersom `cert-manager.io/cluster-issuer` ikke stemmer med HTTPRouten.
 
 ### Eksempel med letsencrypt-staging
 ```yaml

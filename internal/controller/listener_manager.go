@@ -1,9 +1,13 @@
 package controller
 
 import (
+	"cmp"
 	"context"
+	"maps"
+	"slices"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,7 +20,7 @@ import (
 func (r *HTTPRouteReconciler) collectListenersForGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
-) ([]gatewayv1.Listener, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
+) ([]gatewayv1.Listener, map[string]string, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
 	log := logf.FromContext(ctx)
 
 	// List all HTTPRoutes that reference this gateway
@@ -25,7 +29,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	listOpts := []client.ListOption{}
 	// Bypass cache to get the most up-to-date list
 	if err := r.List(ctx, httpRouteList, listOpts...); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// Collect unique hostnames from HTTPRoutes that reference this Gateway
@@ -35,6 +39,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	ignoreDnsUpdates := annotations.NewIgnoreDnsUpdates()
 	overrideTtl := annotations.NewOverrideTtl()
 	overrideInfrastructure := annotations.NewOverrideInfrastructure()
+	var routesOnGateway []*gatewayv1.HTTPRoute
 
 	routeCount := 0
 	skippedCount := 0
@@ -63,6 +68,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 			if refName == gatewayName && refNamespace == gatewayNamespace {
 				routeCount++
+				routesOnGateway = append(routesOnGateway, &route)
 				// Collect all hostnames from this route
 				for _, hostname := range route.Spec.Hostnames {
 					// Add all httproutes that should be created on port 80 without TLS (redirect)
@@ -88,6 +94,18 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		}
 	}
 
+	envoyPodAnnotations, conflicts := resolveEnvoyPodAnnotations(r.EnvoyPodAnnotations, routesOnGateway)
+	for _, conflict := range conflicts {
+		ignored := conflict.route.Annotations[conflict.key]
+		used := conflict.owner.Annotations[conflict.key]
+		log.Info("Ignoring conflicting Envoy pod annotation", "annotation", conflict.key,
+			"route", conflict.route.Namespace+"/"+conflict.route.Name, "ignoredValue", ignored,
+			"ownerRoute", conflict.owner.Namespace+"/"+conflict.owner.Name, "usedValue", used)
+		r.Recorder.Eventf(conflict.route, conflict.owner, corev1.EventTypeWarning, "EnvoyPodAnnotationConflict", "ResolveGatewayAnnotations",
+			"Annotation %s=%q is ignored: Gateway %s/%s uses %q from older HTTPRoute %s/%s",
+			conflict.key, ignored, gatewayNamespace, gatewayName, used, conflict.owner.Namespace, conflict.owner.Name)
+	}
+
 	// Create HTTPS listeners for all collected hostnames
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
@@ -106,7 +124,58 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		"skippedRoutes", skippedCount,
 		"totalRoutes", len(httpRouteList.Items))
 
-	return listeners, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
+	return listeners, envoyPodAnnotations, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
+}
+
+type envoyPodAnnotationConflict struct {
+	key   string
+	route *gatewayv1.HTTPRoute // newer route whose value is ignored
+	owner *gatewayv1.HTTPRoute // older route whose value is used
+}
+
+// resolveEnvoyPodAnnotations picks one value per key; the oldest route wins so the shared Envoy pods are not restarted by a newcomer.
+func resolveEnvoyPodAnnotations(keys []string, routes []*gatewayv1.HTTPRoute) (map[string]string, []envoyPodAnnotationConflict) {
+	sorted := slices.SortedStableFunc(slices.Values(routes), func(a, b *gatewayv1.HTTPRoute) int {
+		return cmp.Or(
+			a.CreationTimestamp.Time.Compare(b.CreationTimestamp.Time),
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(a.Name, b.Name),
+		)
+	})
+
+	values := make(map[string]string)
+	owners := make(map[string]*gatewayv1.HTTPRoute)
+	var conflicts []envoyPodAnnotationConflict
+	for _, route := range sorted {
+		for _, key := range keys {
+			value, ok := route.Annotations[key]
+			if !ok {
+				continue
+			}
+			owner, found := owners[key]
+			if !found {
+				values[key] = value
+				owners[key] = route
+			} else if values[key] != value {
+				conflicts = append(conflicts, envoyPodAnnotationConflict{key: key, route: route, owner: owner})
+			}
+		}
+	}
+	return values, conflicts
+}
+
+func syncEnvoyPodAnnotations(keys []string, existing map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue, desired map[string]string) map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue {
+	result := make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue, len(existing)+len(desired))
+	maps.Copy(result, existing)
+	for _, key := range keys {
+		annotationKey := gatewayv1.AnnotationKey(key)
+		if value, ok := desired[key]; ok {
+			result[annotationKey] = gatewayv1.AnnotationValue(value)
+		} else {
+			delete(result, annotationKey)
+		}
+	}
+	return result
 }
 
 // createHTTPSListener creates an HTTPS listener for a hostname with TLS configuration
@@ -186,7 +255,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	gatewayName := gateway.Name
 
 	// Collect listeners and annotations from all HTTPRoutes referencing this gateway
-	newListeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	newListeners, envoyPodAnnotations, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		return false, err
 	}
@@ -225,6 +294,10 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		}
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
+		if latest.Spec.Infrastructure == nil {
+			latest.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
+		}
+		latest.Spec.Infrastructure.Annotations = syncEnvoyPodAnnotations(r.EnvoyPodAnnotations, latest.Spec.Infrastructure.Annotations, envoyPodAnnotations)
 
 		// Update the gateway's annotations
 		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)

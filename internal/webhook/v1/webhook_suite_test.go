@@ -109,7 +109,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = SetupHTTPRouteWebhookWithManager(mgr)
+	err = SetupHTTPRouteWebhookWithManager(mgr, nil)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook
