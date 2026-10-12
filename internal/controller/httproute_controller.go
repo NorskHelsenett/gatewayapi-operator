@@ -58,6 +58,11 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
+	if !IsGatewayParentRef(httpRoute.Spec.ParentRefs[0]) {
+		log.Error(nil, "HTTPRoute has invalid parentRef. Group should be gateway.networking.k8s.io and kind Gateway")
+		return ctrl.Result{}, nil
+	}
+
 	log.V(1).Info("Reconciling HTTPRoute", "name", httpRoute.Name, "namespace", httpRoute.Namespace)
 
 	// Extract gateway information from first parent ref

@@ -48,10 +48,10 @@ func (v *HTTPRouteCustomValidator) GetReferredGateway(ctx context.Context, httpr
 
 // ListOtherRoutesOnGateway returns the operator-managed HTTPRoutes, except httproute itself, that share its Gateway.
 func (v *HTTPRouteCustomValidator) ListOtherRoutesOnGateway(ctx context.Context, httproute *gatewayv1.HTTPRoute) ([]gatewayv1.HTTPRoute, error) {
-	if len(httproute.Spec.ParentRefs) == 0 {
+	// The controller uses the first parentRef as the Gateway, but only if it actually refers to one.
+	if len(httproute.Spec.ParentRefs) == 0 || !controller.IsGatewayParentRef(httproute.Spec.ParentRefs[0]) {
 		return nil, nil
 	}
-	// The controller uses the first parentRef as the Gateway.
 	gatewayName := string(httproute.Spec.ParentRefs[0].Name)
 	gatewayNamespace := httproute.Namespace
 	if httproute.Spec.ParentRefs[0].Namespace != nil {
