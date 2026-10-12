@@ -62,6 +62,8 @@ metadata:
 - Dersom en konflikt likevel oppstår, brukes verdien fra den eldste routen. Den nyere routen får en Warning-event (`kubectl describe httproute <navn>`).
 - Endring av verdien fører til en rolling restart av Envoy-poddene for Gatewayen.
 - Operatoren eier de konfigurerte nøklene på Gatewayen. Verdier satt manuelt der blir overskrevet eller fjernet.
+- Verdier lengre enn 4096 tegn (grensen i Gateway API) avvises av webhooken og ignoreres av operatoren med en Warning-event.
+- Operatoren registrerer nøklene den har skrevet i Gateway-annoteringen `gatewayapi-operator.vitistack.io/envoy-pod-annotations`. Nøkler som fjernes fra `envoy.podAnnotations`, eller hvis funksjonen slås av, ryddes derfor bort fra eksisterende Gatewayer og Envoy-podder.
 
 ### Gateway organisering
 Det anbefales å benytte samme gateway på tvers av HTTPRoutene i clusteret. Dette sparer allokering av IP-adresser

@@ -7,6 +7,8 @@ import (
 )
 
 func TestParseEnvoyPodAnnotations(t *testing.T) {
+	// A valid qualified name (191-char DNS prefix, 63-char name) that exceeds the 253-char Gateway API key limit.
+	longKey := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "/" + strings.Repeat("n", 63)
 	tests := []struct {
 		name    string
 		value   string
@@ -18,6 +20,7 @@ func TestParseEnvoyPodAnnotations(t *testing.T) {
 		{name: "invalid key", value: "nhn.no/splunk index", wantErr: "invalid annotation key"},
 		{name: "prefix is not supported", value: "nhn.no/", wantErr: "invalid annotation key"},
 		{name: "IPAM key is reserved", value: "ipam.vitistack.io/zone", wantErr: "reserved for IPAM"},
+		{name: "key longer than Gateway API allows", value: longKey, wantErr: "longer than 253"},
 		{name: "too many keys", value: "nhn.no/a,nhn.no/b,nhn.no/c,nhn.no/d,nhn.no/e,nhn.no/f,nhn.no/g,nhn.no/h,nhn.no/i", wantErr: "at most 8"},
 	}
 	for _, tt := range tests {
@@ -36,5 +39,13 @@ func TestParseEnvoyPodAnnotations(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseManagedEnvoyPodAnnotations(t *testing.T) {
+	got := ParseManagedEnvoyPodAnnotations("nhn.no/splunkIndex, ipam.vitistack.io/zone,not a key,nhn.no/splunkIndex,,example.com/x")
+	want := []string{"nhn.no/splunkIndex", "example.com/x"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v (IPAM and invalid keys skipped)", got, want)
 	}
 }

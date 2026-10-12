@@ -74,6 +74,11 @@ The operator refuses to start if more than 8 keys are configured. Gateway API al
 `addresses`, `retention-period-days`). That leaves a technical ceiling of 12; the limit of 8 keeps a margin
 below it so new IPAM settings can be added without Gateway updates being rejected.
 
+Values longer than 4096 characters (the Gateway API limit) are rejected by the webhook and skipped by the
+controller with a `Warning` event. The operator records the keys it wrote in the Gateway annotation
+`gatewayapi-operator.vitistack.io/envoy-pod-annotations`, so keys removed from `envoy.podAnnotations` (or the
+whole feature being disabled) are cleaned up from existing Gateways and Envoy pods.
+
 ```yaml
 envoy:
   podAnnotations:

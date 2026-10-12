@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// ValidateEnvoyPodAnnotations rejects a value that differs from the one used by the oldest other HTTPRoute on the same Gateway.
+// ValidateEnvoyPodAnnotations rejects a value Gateway API cannot store, or one that differs from the value used by the oldest
+// other HTTPRoute on the same Gateway.
 func ValidateEnvoyPodAnnotations(keys []string, httproute *gatewayv1.HTTPRoute, otherRoutesOnGateway []gatewayv1.HTTPRoute) error {
 	sorted := slices.SortedStableFunc(slices.Values(otherRoutesOnGateway), func(a, b gatewayv1.HTTPRoute) int {
 		return cmp.Or(
@@ -22,6 +24,10 @@ func ValidateEnvoyPodAnnotations(keys []string, httproute *gatewayv1.HTTPRoute, 
 		value, ok := httproute.Annotations[key]
 		if !ok {
 			continue
+		}
+		if len(value) > annotations.MaxAnnotationValueLength {
+			return fmt.Errorf("HTTPRoute annotation %s is %d characters, Gateway API allows at most %d",
+				key, len(value), annotations.MaxAnnotationValueLength)
 		}
 		for _, other := range sorted {
 			existing, found := other.Annotations[key]

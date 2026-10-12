@@ -150,10 +150,12 @@ func (r *HTTPRouteReconciler) createGateway(
 		Spec: gatewayv1.GatewaySpec{
 			Listeners: listeners,
 			Infrastructure: &gatewayv1.GatewayInfrastructure{
-				Annotations: syncEnvoyPodAnnotations(r.EnvoyPodAnnotations, buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays), envoyPodAnnotations),
+				Annotations: buildInfrastructureAnnotations(ipamZone, ipFamily, ipamAddresses, ipamRetentionPeriodDays),
 			},
 		},
 	}
+
+	syncEnvoyPodAnnotations(newGateway, r.EnvoyPodAnnotations, envoyPodAnnotations)
 
 	UpdateGatewayAnnotations(ctx, newGateway, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)
 

@@ -93,24 +93,130 @@ func TestCollectListenersForGatewayResolvesEnvoyPodAnnotationConflict(t *testing
 	}
 }
 
-func TestSyncEnvoyPodAnnotations(t *testing.T) {
-	existing := map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
-		annotations.AnnotationIPAMZone: "inet",
-		splunkIndex:                    "old-index",
-		splunkSourcetype:               "old-sourcetype",
+func TestCollectListenersForGatewayUsesRouteNamespaceForOmittedParentRefNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := gatewayv1.Install(scheme); err != nil {
+		t.Fatal(err)
+	}
+	onGateway := newRoute("on-gateway", time.Now(), map[string]string{splunkIndex: "team_a"})
+	// Same Gateway name without namespace, so it refers to other/gw and not team/gw.
+	otherNamespace := newRoute("other-namespace", time.Now().Add(-time.Hour), map[string]string{splunkIndex: "other_a"})
+	otherNamespace.Namespace = "other"
+
+	r := &HTTPRouteReconciler{
+		Client:              fake.NewClientBuilder().WithScheme(scheme).WithObjects(onGateway, otherNamespace).Build(),
+		Scheme:              scheme,
+		Recorder:            events.NewFakeRecorder(10),
+		EnvoyPodAnnotations: testEnvoyPodAnnotations,
 	}
 
-	got := syncEnvoyPodAnnotations(testEnvoyPodAnnotations, existing, map[string]string{splunkIndex: "new-index"})
+	listeners, envoyPodAnnotations, _, _, _, err := r.collectListenersForGateway(context.Background(), "gw", "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listeners) != 1 || string(*listeners[0].Hostname) != "on-gateway.example.com" {
+		t.Errorf("got listeners %v, want only on-gateway.example.com", listeners)
+	}
+	if got := envoyPodAnnotations[splunkIndex]; got != "team_a" {
+		t.Errorf("splunkIndex = %q, want %q from the route in the Gateway's namespace", got, "team_a")
+	}
+}
+
+func TestCollectListenersForGatewaySkipsTooLongValue(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := gatewayv1.Install(scheme); err != nil {
+		t.Fatal(err)
+	}
+	tooLong := newRoute("too-long", time.Now().Add(-time.Hour), map[string]string{
+		splunkIndex: strings.Repeat("x", annotations.MaxAnnotationValueLength+1),
+	})
+	valid := newRoute("valid", time.Now(), map[string]string{splunkIndex: "team_a"})
+
+	recorder := events.NewFakeRecorder(10)
+	r := &HTTPRouteReconciler{
+		Client:              fake.NewClientBuilder().WithScheme(scheme).WithObjects(tooLong, valid).Build(),
+		Scheme:              scheme,
+		Recorder:            recorder,
+		EnvoyPodAnnotations: testEnvoyPodAnnotations,
+	}
+
+	_, envoyPodAnnotations, _, _, _, err := r.collectListenersForGateway(context.Background(), "gw", "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := envoyPodAnnotations[splunkIndex]; got != "team_a" {
+		t.Errorf("splunkIndex = %q, want the valid value %q", got, "team_a")
+	}
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, "Warning EnvoyPodAnnotationTooLong") {
+			t.Errorf("unexpected event %q", event)
+		}
+	default:
+		t.Fatal("expected a Warning event for the too long value")
+	}
+}
+
+func TestSyncEnvoyPodAnnotationsRemovesDeconfiguredKeys(t *testing.T) {
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			annotations.AnnotationManagedEnvoyPodAnnotations: "nhn.no/splunkIndex,nhn.no/splunkSourcetype,example.com/removed",
+		}},
+		Spec: gatewayv1.GatewaySpec{Infrastructure: &gatewayv1.GatewayInfrastructure{
+			Annotations: map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+				annotations.AnnotationIPAMZone: "inet",
+				splunkIndex:                    "old-index",
+				splunkSourcetype:               "old-sourcetype",
+				"example.com/removed":          "old",
+			},
+		}},
+	}
+
+	syncEnvoyPodAnnotations(gw, []string{splunkIndex}, map[string]string{splunkIndex: "new-index"})
+
+	got := gw.Spec.Infrastructure.Annotations
 	if got[splunkIndex] != "new-index" {
 		t.Errorf("splunkIndex = %q, want %q", got[splunkIndex], "new-index")
 	}
-	if _, exists := got[splunkSourcetype]; exists {
-		t.Error("stale splunkSourcetype annotation was not removed")
+	for _, key := range []gatewayv1.AnnotationKey{splunkSourcetype, "example.com/removed"} {
+		if _, exists := got[key]; exists {
+			t.Errorf("deconfigured key %s was not removed", key)
+		}
 	}
 	if got[annotations.AnnotationIPAMZone] != "inet" {
 		t.Error("IPAM annotation was not preserved")
 	}
-	if existing[splunkIndex] != "old-index" {
-		t.Error("input map was mutated")
+	if managed := gw.Annotations[annotations.AnnotationManagedEnvoyPodAnnotations]; managed != splunkIndex {
+		t.Errorf("managed keys = %q, want %q", managed, splunkIndex)
+	}
+}
+
+func TestSyncEnvoyPodAnnotationsNeverRemovesIPAMKeys(t *testing.T) {
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
+			annotations.AnnotationManagedEnvoyPodAnnotations: "ipam.vitistack.io/zone",
+		}},
+		Spec: gatewayv1.GatewaySpec{Infrastructure: &gatewayv1.GatewayInfrastructure{
+			Annotations: map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{annotations.AnnotationIPAMZone: "inet"},
+		}},
+	}
+
+	syncEnvoyPodAnnotations(gw, nil, nil)
+
+	if gw.Spec.Infrastructure.Annotations[annotations.AnnotationIPAMZone] != "inet" {
+		t.Error("IPAM annotation listed as managed was removed")
+	}
+	if _, exists := gw.Annotations[annotations.AnnotationManagedEnvoyPodAnnotations]; exists {
+		t.Error("managed keys annotation was not removed")
+	}
+}
+
+func TestSyncEnvoyPodAnnotationsLeavesUnusedGatewayUntouched(t *testing.T) {
+	gw := &gatewayv1.Gateway{}
+
+	syncEnvoyPodAnnotations(gw, testEnvoyPodAnnotations, map[string]string{})
+
+	if gw.Spec.Infrastructure != nil || gw.Annotations != nil {
+		t.Errorf("gateway without Envoy pod annotations was modified: %+v", gw)
 	}
 }

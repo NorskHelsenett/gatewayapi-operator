@@ -83,3 +83,11 @@ func TestValidateEnvoyPodAnnotations_IgnoresKeysNotConfigured(t *testing.T) {
 		t.Errorf("expected nil error for a key that is not configured, got %v", err)
 	}
 }
+
+func TestValidateEnvoyPodAnnotations_RejectsValueGatewayAPICannotStore(t *testing.T) {
+	route := newHTTProute(map[string]string{splunkIndex: strings.Repeat("x", 4097)})
+	err := validations.ValidateEnvoyPodAnnotations(envoyPodAnnotations, route, nil)
+	if err == nil || !strings.Contains(err.Error(), "at most 4096") {
+		t.Errorf("expected length error, got %v", err)
+	}
+}
