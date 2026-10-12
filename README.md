@@ -79,6 +79,11 @@ controller with a `Warning` event. The operator records the keys it wrote in the
 `gatewayapi-operator.vitistack.io/envoy-pod-annotations`, so keys removed from `envoy.podAnnotations` (or the
 whole feature being disabled) are cleaned up from existing Gateways and Envoy pods.
 
+When a route stops being managed by the operator (`gatewayapi-operator.vitistack.io/enabled` removed or set to
+`"false"`), its values are not removed immediately. They are cleaned up the next time the Gateway is synchronized,
+when another route on the same Gateway changes or at the operator's periodic resync. If it was the only route on
+the Gateway, the Gateway is left unchanged, the same as its listeners.
+
 ```yaml
 envoy:
   podAnnotations:

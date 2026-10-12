@@ -91,3 +91,10 @@ func TestValidateEnvoyPodAnnotations_RejectsValueGatewayAPICannotStore(t *testin
 		t.Errorf("expected length error, got %v", err)
 	}
 }
+
+func TestValidateEnvoyPodAnnotations_CountsCharactersNotBytes(t *testing.T) {
+	route := newHTTProute(map[string]string{splunkIndex: strings.Repeat("ø", 2100)}) // 4200 bytes, 2100 characters
+	if err := validations.ValidateEnvoyPodAnnotations(envoyPodAnnotations, route, nil); err != nil {
+		t.Errorf("value within the 4096-character limit was rejected: %v", err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/controller"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -15,11 +16,7 @@ func (v *HTTPRouteCustomValidator) GetReferredGateway(ctx context.Context, httpr
 	log := logf.FromContext(ctx)
 
 	for _, parentRef := range httproute.Spec.ParentRefs {
-		// Only handle Gateway resources
-		if parentRef.Group != nil && *parentRef.Group != gatewayv1.GroupName {
-			continue
-		}
-		if parentRef.Kind != nil && *parentRef.Kind != "Gateway" {
+		if !controller.IsGatewayParentRef(parentRef) {
 			continue
 		}
 
@@ -75,6 +72,9 @@ func (v *HTTPRouteCustomValidator) ListOtherRoutesOnGateway(ctx context.Context,
 			continue
 		}
 		for _, parentRef := range route.Spec.ParentRefs {
+			if !controller.IsGatewayParentRef(parentRef) {
+				continue
+			}
 			refNamespace := route.Namespace
 			if parentRef.Namespace != nil {
 				refNamespace = string(*parentRef.Namespace)

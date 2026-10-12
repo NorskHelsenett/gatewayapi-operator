@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	corev1 "k8s.io/api/core/v1"
@@ -61,6 +62,9 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 		// Check if this route references our gateway
 		for _, parentRef := range route.Spec.ParentRefs {
+			if !IsGatewayParentRef(parentRef) {
+				continue
+			}
 			refName := string(parentRef.Name)
 			// Gateway API defaults an omitted parentRef namespace to the route's own namespace.
 			refNamespace := route.Namespace
@@ -98,7 +102,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 	envoyPodAnnotations, conflicts, tooLong := resolveEnvoyPodAnnotations(r.EnvoyPodAnnotations, routesOnGateway)
 	for _, invalid := range tooLong {
-		length := len(invalid.route.Annotations[invalid.key])
+		length := utf8.RuneCountInString(invalid.route.Annotations[invalid.key])
 		log.Info("Ignoring Envoy pod annotation with too long value", "annotation", invalid.key,
 			"route", invalid.route.Namespace+"/"+invalid.route.Name, "length", length)
 		r.Recorder.Eventf(invalid.route, nil, corev1.EventTypeWarning, "EnvoyPodAnnotationTooLong", "ResolveGatewayAnnotations",
@@ -143,6 +147,11 @@ type envoyPodAnnotationConflict struct {
 	owner *gatewayv1.HTTPRoute // older route whose value is used
 }
 
+// IsGatewayParentRef reports whether a parentRef points at a Gateway; omitted Group and Kind default to a Gateway API Gateway.
+func IsGatewayParentRef(ref gatewayv1.ParentReference) bool {
+	return (ref.Group == nil || *ref.Group == gatewayv1.GroupName) && (ref.Kind == nil || *ref.Kind == "Gateway")
+}
+
 type envoyPodAnnotationTooLong struct {
 	key   string
 	route *gatewayv1.HTTPRoute
@@ -168,8 +177,8 @@ func resolveEnvoyPodAnnotations(keys []string, routes []*gatewayv1.HTTPRoute) (m
 			if !ok {
 				continue
 			}
-			// Gateway API would reject every update of the Gateway with this value.
-			if len(value) > annotations.MaxAnnotationValueLength {
+			// Gateway API would reject every update of the Gateway with this value; like the API server, count characters, not bytes.
+			if utf8.RuneCountInString(value) > annotations.MaxAnnotationValueLength {
 				tooLong = append(tooLong, envoyPodAnnotationTooLong{key: key, route: route})
 				continue
 			}

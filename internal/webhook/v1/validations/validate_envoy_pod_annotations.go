@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -25,9 +26,10 @@ func ValidateEnvoyPodAnnotations(keys []string, httproute *gatewayv1.HTTPRoute, 
 		if !ok {
 			continue
 		}
-		if len(value) > annotations.MaxAnnotationValueLength {
+		// Like the API server's maxLength validation, count characters, not bytes.
+		if length := utf8.RuneCountInString(value); length > annotations.MaxAnnotationValueLength {
 			return fmt.Errorf("HTTPRoute annotation %s is %d characters, Gateway API allows at most %d",
-				key, len(value), annotations.MaxAnnotationValueLength)
+				key, length, annotations.MaxAnnotationValueLength)
 		}
 		for _, other := range sorted {
 			existing, found := other.Annotations[key]

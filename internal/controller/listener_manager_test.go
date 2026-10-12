@@ -220,3 +220,66 @@ func TestSyncEnvoyPodAnnotationsLeavesUnusedGatewayUntouched(t *testing.T) {
 		t.Errorf("gateway without Envoy pod annotations was modified: %+v", gw)
 	}
 }
+
+func TestIsGatewayParentRef(t *testing.T) {
+	group := func(s string) *gatewayv1.Group { g := gatewayv1.Group(s); return &g }
+	kind := func(s string) *gatewayv1.Kind { k := gatewayv1.Kind(s); return &k }
+	tests := []struct {
+		name string
+		ref  gatewayv1.ParentReference
+		want bool
+	}{
+		{name: "omitted group and kind", ref: gatewayv1.ParentReference{Name: "gw"}, want: true},
+		{name: "explicit Gateway", ref: gatewayv1.ParentReference{Group: group(gatewayv1.GroupName), Kind: kind("Gateway"), Name: "gw"}, want: true},
+		{name: "Service parent", ref: gatewayv1.ParentReference{Group: group(""), Kind: kind("Service"), Name: "gw"}, want: false},
+		{name: "other kind in Gateway API group", ref: gatewayv1.ParentReference{Kind: kind("ListenerSet"), Name: "gw"}, want: false},
+		{name: "Gateway kind in custom group", ref: gatewayv1.ParentReference{Group: group("example.com"), Kind: kind("Gateway"), Name: "gw"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsGatewayParentRef(tt.ref); got != tt.want {
+				t.Errorf("IsGatewayParentRef() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollectListenersForGatewayIgnoresNonGatewayParentRef(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := gatewayv1.Install(scheme); err != nil {
+		t.Fatal(err)
+	}
+	onGateway := newRoute("on-gateway", time.Now(), map[string]string{splunkIndex: "team_a"})
+	// Older route whose Service parent has the same name and namespace as the Gateway.
+	meshRoute := newRoute("mesh", time.Now().Add(-time.Hour), map[string]string{splunkIndex: "mesh_a"})
+	core, service := gatewayv1.Group(""), gatewayv1.Kind("Service")
+	meshRoute.Spec.ParentRefs = []gatewayv1.ParentReference{{Group: &core, Kind: &service, Name: "gw"}}
+
+	r := &HTTPRouteReconciler{
+		Client:              fake.NewClientBuilder().WithScheme(scheme).WithObjects(onGateway, meshRoute).Build(),
+		Scheme:              scheme,
+		Recorder:            events.NewFakeRecorder(10),
+		EnvoyPodAnnotations: testEnvoyPodAnnotations,
+	}
+
+	listeners, envoyPodAnnotations, _, _, _, err := r.collectListenersForGateway(context.Background(), "gw", "team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listeners) != 1 || string(*listeners[0].Hostname) != "on-gateway.example.com" {
+		t.Errorf("got listeners %v, want only on-gateway.example.com", listeners)
+	}
+	if got := envoyPodAnnotations[splunkIndex]; got != "team_a" {
+		t.Errorf("splunkIndex = %q, want %q from the route that references the Gateway", got, "team_a")
+	}
+}
+
+func TestResolveEnvoyPodAnnotationsCountsCharactersNotBytes(t *testing.T) {
+	value := strings.Repeat("ø", 2100) // 4200 bytes, but only 2100 characters
+	route := newRoute("route", time.Now(), map[string]string{splunkIndex: value})
+
+	values, _, tooLong := resolveEnvoyPodAnnotations(testEnvoyPodAnnotations, []*gatewayv1.HTTPRoute{route})
+	if len(tooLong) != 0 || values[splunkIndex] != value {
+		t.Errorf("value within the 4096-character limit was rejected (tooLong=%d)", len(tooLong))
+	}
+}

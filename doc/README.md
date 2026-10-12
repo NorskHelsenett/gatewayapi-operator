@@ -64,6 +64,7 @@ metadata:
 - Operatoren eier de konfigurerte nøklene på Gatewayen. Verdier satt manuelt der blir overskrevet eller fjernet.
 - Verdier lengre enn 4096 tegn (grensen i Gateway API) avvises av webhooken og ignoreres av operatoren med en Warning-event.
 - Operatoren registrerer nøklene den har skrevet i Gateway-annoteringen `gatewayapi-operator.vitistack.io/envoy-pod-annotations`. Nøkler som fjernes fra `envoy.podAnnotations`, eller hvis funksjonen slås av, ryddes derfor bort fra eksisterende Gatewayer og Envoy-podder.
+- Hvis en route slutter å bli styrt av operatoren (`gatewayapi-operator.vitistack.io/enabled` fjernes eller settes til `"false"`), fjernes ikke verdiene fra Gatewayen med en gang. De ryddes ved neste synk av Gatewayen, når en annen route på samme Gateway endres eller ved operatorens periodiske resynk. Var routen alene på Gatewayen, blir Gatewayen stående uendret, på samme måte som listeners.
 
 ### Gateway organisering
 Det anbefales å benytte samme gateway på tvers av HTTPRoutene i clusteret. Dette sparer allokering av IP-adresser
