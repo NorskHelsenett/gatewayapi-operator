@@ -18,6 +18,10 @@ const (
 	// MaxAnnotationValueLength is the Gateway API limit for an infrastructure annotation value.
 	MaxAnnotationValueLength = 4096
 
+	// MaxInfrastructureAnnotations is the Gateway API limit on Gateway.spec.infrastructure.annotations entries,
+	// counting IPAM keys and any other unmanaged annotations already present on the Gateway.
+	MaxInfrastructureAnnotations = 16
+
 	// maxAnnotationKeyLength is the Gateway API limit for an infrastructure annotation key.
 	maxAnnotationKeyLength = 253
 )

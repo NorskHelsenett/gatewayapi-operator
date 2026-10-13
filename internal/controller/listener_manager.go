@@ -3,6 +3,7 @@ package controller
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -194,8 +195,11 @@ func resolveEnvoyPodAnnotations(keys []string, routes []*gatewayv1.HTTPRoute) (m
 	return values, conflicts, tooLong
 }
 
-// syncEnvoyPodAnnotations writes the desired values and removes configured or previously managed keys that are no longer desired.
-func syncEnvoyPodAnnotations(gw *gatewayv1.Gateway, keys []string, desired map[string]string) {
+// syncEnvoyPodAnnotations writes the desired values and removes configured or previously managed keys that are no longer
+// desired. Pre-existing, unmanaged annotations can already leave little headroom under Gateway API's infrastructure
+// annotation limit; rather than silently dropping keys, it leaves gw untouched and returns an error so the caller can
+// fail the whole Gateway update.
+func syncEnvoyPodAnnotations(gw *gatewayv1.Gateway, keys []string, desired map[string]string) error {
 	var existing map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue
 	if gw.Spec.Infrastructure != nil {
 		existing = gw.Spec.Infrastructure.Annotations
@@ -215,6 +219,11 @@ func syncEnvoyPodAnnotations(gw *gatewayv1.Gateway, keys []string, desired map[s
 		}
 	}
 
+	if len(result) > annotations.MaxInfrastructureAnnotations {
+		return fmt.Errorf("gateway %s/%s would have %d infrastructure annotations, Gateway API allows at most %d",
+			gw.Namespace, gw.Name, len(result), annotations.MaxInfrastructureAnnotations)
+	}
+
 	if gw.Spec.Infrastructure == nil && len(result) > 0 {
 		gw.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
 	}
@@ -224,12 +233,13 @@ func syncEnvoyPodAnnotations(gw *gatewayv1.Gateway, keys []string, desired map[s
 
 	if len(written) == 0 {
 		delete(gw.Annotations, annotations.AnnotationManagedEnvoyPodAnnotations)
-		return
+		return nil
 	}
 	if gw.Annotations == nil {
 		gw.Annotations = make(map[string]string)
 	}
 	gw.Annotations[annotations.AnnotationManagedEnvoyPodAnnotations] = strings.Join(written, ",")
+	return nil
 }
 
 // createHTTPSListener creates an HTTPS listener for a hostname with TLS configuration
@@ -348,7 +358,10 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		}
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
-		syncEnvoyPodAnnotations(&latest, r.EnvoyPodAnnotations, envoyPodAnnotations)
+		if syncErr := syncEnvoyPodAnnotations(&latest, r.EnvoyPodAnnotations, envoyPodAnnotations); syncErr != nil {
+			r.Recorder.Eventf(&latest, nil, corev1.EventTypeWarning, "EnvoyPodAnnotationLimitReached", "SyncEnvoyPodAnnotations", syncErr.Error())
+			return syncErr
+		}
 
 		// Update the gateway's annotations
 		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)

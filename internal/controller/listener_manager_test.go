@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -218,6 +219,31 @@ func TestSyncEnvoyPodAnnotationsLeavesUnusedGatewayUntouched(t *testing.T) {
 
 	if gw.Spec.Infrastructure != nil || gw.Annotations != nil {
 		t.Errorf("gateway without Envoy pod annotations was modified: %+v", gw)
+	}
+}
+
+func TestSyncEnvoyPodAnnotationsFailsPastInfrastructureLimit(t *testing.T) {
+	existing := make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue, annotations.MaxInfrastructureAnnotations-1)
+	for i := 0; i < annotations.MaxInfrastructureAnnotations-1; i++ {
+		existing[gatewayv1.AnnotationKey(fmt.Sprintf("example.com/unmanaged-%d", i))] = "value"
+	}
+	gw := &gatewayv1.Gateway{
+		Spec: gatewayv1.GatewaySpec{Infrastructure: &gatewayv1.GatewayInfrastructure{Annotations: existing}},
+	}
+
+	err := syncEnvoyPodAnnotations(gw, testEnvoyPodAnnotations, map[string]string{
+		splunkIndex:      "team_a",
+		splunkSourcetype: "kube:container:envoy",
+	})
+
+	if err == nil {
+		t.Fatal("expected an error when the merged annotations would exceed the limit")
+	}
+	if len(gw.Spec.Infrastructure.Annotations) != annotations.MaxInfrastructureAnnotations-1 {
+		t.Errorf("got %d annotations, gateway must be left untouched on failure", len(gw.Spec.Infrastructure.Annotations))
+	}
+	if _, exists := gw.Annotations[annotations.AnnotationManagedEnvoyPodAnnotations]; exists {
+		t.Error("managed keys annotation must not be set when the update is rejected")
 	}
 }
 
