@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/controller"
 	webhookv1 "github.com/NorskHelsenett/gatewayapi-operator/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
@@ -88,6 +89,10 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	var envoyPodAnnotationsFlag string
+	flag.StringVar(&envoyPodAnnotationsFlag, "envoy-pod-annotations", "",
+		"Comma-separated HTTPRoute annotation keys to copy to the Gateway's infrastructure annotations, "+
+			"which Envoy Gateway puts on the Envoy pods. Empty disables the feature.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -95,6 +100,13 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	envoyPodAnnotations, err := annotations.ParseEnvoyPodAnnotations(envoyPodAnnotationsFlag)
+	if err != nil {
+		setupLog.Error(err, "invalid --envoy-pod-annotations")
+		os.Exit(1)
+	}
+	setupLog.Info("Envoy pod annotations from HTTPRoutes", "keys", envoyPodAnnotations)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -188,15 +200,17 @@ func main() {
 	}
 
 	if err := (&controller.HTTPRouteReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		Recorder:            mgr.GetEventRecorder("gatewayapi-operator"),
+		EnvoyPodAnnotations: envoyPodAnnotations,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
 		os.Exit(1)
 	}
 	// nolint:goconst
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err := webhookv1.SetupHTTPRouteWebhookWithManager(mgr); err != nil {
+		if err := webhookv1.SetupHTTPRouteWebhookWithManager(mgr, envoyPodAnnotations); err != nil {
 			setupLog.Error(err, "Failed to create webhook", "webhook", "HTTPRoute")
 			os.Exit(1)
 		}

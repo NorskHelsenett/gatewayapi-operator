@@ -82,3 +82,10 @@ networkPolicy:
 # [PQC]: Enables post quantum cryptography via the ClientTrafficPolicy Envoy CRD
 envoy:
   pqc: true
+  # HTTPRoute annotation keys (exact keys, at most 8) copied to the Gateway's spec.infrastructure.annotations,
+  # which Envoy Gateway puts on the shared Envoy pods. Changing a value restarts the Envoy pods of that Gateway.
+  # Empty disables the feature. Example:
+  # podAnnotations:
+  #   - nhn.no/splunkIndex
+  #   - nhn.no/splunkSourcetype
+  podAnnotations: []

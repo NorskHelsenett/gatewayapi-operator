@@ -1,9 +1,16 @@
 package controller
 
 import (
+	"cmp"
 	"context"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,7 +23,7 @@ import (
 func (r *HTTPRouteReconciler) collectListenersForGateway(
 	ctx context.Context,
 	gatewayName, gatewayNamespace string,
-) ([]gatewayv1.Listener, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
+) ([]gatewayv1.Listener, map[string]string, annotations.IgnoreDnsUpdates, annotations.OverrideInfrastrucutre, annotations.OverrideTtl, error) {
 	log := logf.FromContext(ctx)
 
 	// List all HTTPRoutes that reference this gateway
@@ -25,7 +32,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	listOpts := []client.ListOption{}
 	// Bypass cache to get the most up-to-date list
 	if err := r.List(ctx, httpRouteList, listOpts...); err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, err
 	}
 
 	// Collect unique hostnames from HTTPRoutes that reference this Gateway
@@ -35,6 +42,7 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 	ignoreDnsUpdates := annotations.NewIgnoreDnsUpdates()
 	overrideTtl := annotations.NewOverrideTtl()
 	overrideInfrastructure := annotations.NewOverrideInfrastructure()
+	var routesOnGateway []*gatewayv1.HTTPRoute
 
 	routeCount := 0
 	skippedCount := 0
@@ -55,14 +63,19 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 
 		// Check if this route references our gateway
 		for _, parentRef := range route.Spec.ParentRefs {
+			if !IsGatewayParentRef(parentRef) {
+				continue
+			}
 			refName := string(parentRef.Name)
-			refNamespace := gatewayNamespace
+			// Gateway API defaults an omitted parentRef namespace to the route's own namespace.
+			refNamespace := route.Namespace
 			if parentRef.Namespace != nil {
 				refNamespace = string(*parentRef.Namespace)
 			}
 
 			if refName == gatewayName && refNamespace == gatewayNamespace {
 				routeCount++
+				routesOnGateway = append(routesOnGateway, &route)
 				// Collect all hostnames from this route
 				for _, hostname := range route.Spec.Hostnames {
 					// Add all httproutes that should be created on port 80 without TLS (redirect)
@@ -88,6 +101,26 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		}
 	}
 
+	envoyPodAnnotations, conflicts, tooLong := resolveEnvoyPodAnnotations(r.EnvoyPodAnnotations, routesOnGateway)
+	for _, invalid := range tooLong {
+		length := utf8.RuneCountInString(invalid.route.Annotations[invalid.key])
+		log.Info("Ignoring Envoy pod annotation with too long value", "annotation", invalid.key,
+			"route", invalid.route.Namespace+"/"+invalid.route.Name, "length", length)
+		r.Recorder.Eventf(invalid.route, nil, corev1.EventTypeWarning, "EnvoyPodAnnotationTooLong", "ResolveGatewayAnnotations",
+			"Annotation %s is ignored: value is %d characters, Gateway API allows at most %d",
+			invalid.key, length, annotations.MaxAnnotationValueLength)
+	}
+	for _, conflict := range conflicts {
+		ignored := conflict.route.Annotations[conflict.key]
+		used := conflict.owner.Annotations[conflict.key]
+		log.Info("Ignoring conflicting Envoy pod annotation", "annotation", conflict.key,
+			"route", conflict.route.Namespace+"/"+conflict.route.Name, "ignoredValue", ignored,
+			"ownerRoute", conflict.owner.Namespace+"/"+conflict.owner.Name, "usedValue", used)
+		r.Recorder.Eventf(conflict.route, conflict.owner, corev1.EventTypeWarning, "EnvoyPodAnnotationConflict", "ResolveGatewayAnnotations",
+			"Annotation %s=%q is ignored: Gateway %s/%s uses %q from older HTTPRoute %s/%s",
+			conflict.key, ignored, gatewayNamespace, gatewayName, used, conflict.owner.Namespace, conflict.owner.Name)
+	}
+
 	// Create HTTPS listeners for all collected hostnames
 	listeners := make([]gatewayv1.Listener, 0, len(hostnameSet)+len(httpHostnameSet))
 
@@ -106,7 +139,107 @@ func (r *HTTPRouteReconciler) collectListenersForGateway(
 		"skippedRoutes", skippedCount,
 		"totalRoutes", len(httpRouteList.Items))
 
-	return listeners, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
+	return listeners, envoyPodAnnotations, ignoreDnsUpdates, overrideInfrastructure, overrideTtl, nil
+}
+
+type envoyPodAnnotationConflict struct {
+	key   string
+	route *gatewayv1.HTTPRoute // newer route whose value is ignored
+	owner *gatewayv1.HTTPRoute // older route whose value is used
+}
+
+// IsGatewayParentRef reports whether a parentRef points at a Gateway; omitted Group and Kind default to a Gateway API Gateway.
+func IsGatewayParentRef(ref gatewayv1.ParentReference) bool {
+	return (ref.Group == nil || *ref.Group == gatewayv1.GroupName) && (ref.Kind == nil || *ref.Kind == "Gateway")
+}
+
+type envoyPodAnnotationTooLong struct {
+	key   string
+	route *gatewayv1.HTTPRoute
+}
+
+// resolveEnvoyPodAnnotations picks one value per key; the oldest route wins so the shared Envoy pods are not restarted by a newcomer.
+func resolveEnvoyPodAnnotations(keys []string, routes []*gatewayv1.HTTPRoute) (map[string]string, []envoyPodAnnotationConflict, []envoyPodAnnotationTooLong) {
+	sorted := slices.SortedStableFunc(slices.Values(routes), func(a, b *gatewayv1.HTTPRoute) int {
+		return cmp.Or(
+			a.CreationTimestamp.Time.Compare(b.CreationTimestamp.Time),
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(a.Name, b.Name),
+		)
+	})
+
+	values := make(map[string]string)
+	owners := make(map[string]*gatewayv1.HTTPRoute)
+	var conflicts []envoyPodAnnotationConflict
+	var tooLong []envoyPodAnnotationTooLong
+	for _, route := range sorted {
+		for _, key := range keys {
+			value, ok := route.Annotations[key]
+			if !ok {
+				continue
+			}
+			// Gateway API would reject every update of the Gateway with this value; like the API server, count characters, not bytes.
+			if utf8.RuneCountInString(value) > annotations.MaxAnnotationValueLength {
+				tooLong = append(tooLong, envoyPodAnnotationTooLong{key: key, route: route})
+				continue
+			}
+			owner, found := owners[key]
+			if !found {
+				values[key] = value
+				owners[key] = route
+			} else if values[key] != value {
+				conflicts = append(conflicts, envoyPodAnnotationConflict{key: key, route: route, owner: owner})
+			}
+		}
+	}
+	return values, conflicts, tooLong
+}
+
+// syncEnvoyPodAnnotations writes the desired values and removes configured or previously managed keys that are no longer
+// desired. Pre-existing, unmanaged annotations can already leave little headroom under Gateway API's infrastructure
+// annotation limit; rather than silently dropping keys, it leaves gw untouched and returns an error so the caller can
+// fail the whole Gateway update.
+func syncEnvoyPodAnnotations(gw *gatewayv1.Gateway, keys []string, desired map[string]string) error {
+	var existing map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue
+	if gw.Spec.Infrastructure != nil {
+		existing = gw.Spec.Infrastructure.Annotations
+	}
+	result := make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue, len(existing)+len(desired))
+	maps.Copy(result, existing)
+
+	managed := annotations.ParseManagedEnvoyPodAnnotations(gw.Annotations[annotations.AnnotationManagedEnvoyPodAnnotations])
+	for _, key := range slices.Concat(managed, keys) {
+		delete(result, gatewayv1.AnnotationKey(key))
+	}
+	var written []string
+	for _, key := range keys {
+		if value, ok := desired[key]; ok {
+			result[gatewayv1.AnnotationKey(key)] = gatewayv1.AnnotationValue(value)
+			written = append(written, key)
+		}
+	}
+
+	if len(result) > annotations.MaxInfrastructureAnnotations {
+		return fmt.Errorf("gateway %s/%s would have %d infrastructure annotations, Gateway API allows at most %d",
+			gw.Namespace, gw.Name, len(result), annotations.MaxInfrastructureAnnotations)
+	}
+
+	if gw.Spec.Infrastructure == nil && len(result) > 0 {
+		gw.Spec.Infrastructure = &gatewayv1.GatewayInfrastructure{}
+	}
+	if gw.Spec.Infrastructure != nil {
+		gw.Spec.Infrastructure.Annotations = result
+	}
+
+	if len(written) == 0 {
+		delete(gw.Annotations, annotations.AnnotationManagedEnvoyPodAnnotations)
+		return nil
+	}
+	if gw.Annotations == nil {
+		gw.Annotations = make(map[string]string)
+	}
+	gw.Annotations[annotations.AnnotationManagedEnvoyPodAnnotations] = strings.Join(written, ",")
+	return nil
 }
 
 // createHTTPSListener creates an HTTPS listener for a hostname with TLS configuration
@@ -186,7 +319,7 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 	gatewayName := gateway.Name
 
 	// Collect listeners and annotations from all HTTPRoutes referencing this gateway
-	newListeners, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
+	newListeners, envoyPodAnnotations, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation, err := r.collectListenersForGateway(ctx, gatewayName, gatewayNamespace)
 	if err != nil {
 		return false, err
 	}
@@ -225,6 +358,10 @@ func (r *HTTPRouteReconciler) updateGatewayListeners(
 		}
 		// Update the listeners array before updating the object
 		latest.Spec.Listeners = newListeners
+		if syncErr := syncEnvoyPodAnnotations(&latest, r.EnvoyPodAnnotations, envoyPodAnnotations); syncErr != nil {
+			r.Recorder.Eventf(&latest, nil, corev1.EventTypeWarning, "EnvoyPodAnnotationLimitReached", "SyncEnvoyPodAnnotations", syncErr.Error())
+			return syncErr
+		}
 
 		// Update the gateway's annotations
 		UpdateGatewayAnnotations(ctx, &latest, ignoreDnsUpdatesAnnoation, overrideinfrastructureAnnoation, overrideTtlAnnotation)

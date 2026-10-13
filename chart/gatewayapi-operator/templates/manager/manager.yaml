@@ -34,6 +34,9 @@ spec:
             {{- if .Values.certmanager.enable }}
             - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
             {{- end }}
+            {{- with .Values.envoy.podAnnotations }}
+            - {{ printf "--envoy-pod-annotations=%s" (join "," .) | quote }}
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}

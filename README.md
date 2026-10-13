@@ -62,6 +62,35 @@ argocd      hnet-private-argo   eg                True         3s
 | `dns.nhn.no/override-infrastructure` | JSON specifying which DNS infrastructure to use, e.g. `'{"infrastructure":["<infrastructure>"]}'` | Yes | Not applied |
 | `dns.nhn.no/override-ttl` | Override the default TTL for the DNS zone (seconds) | Yes | Not applied |
 
+### Annotations on the Envoy pods
+Up to eight HTTPRoute annotations can be mirrored to the gateway's `spec.infrastructure.annotations`, which
+Envoy Gateway puts on the shared Envoy pods. The keys are configured with the Helm value `envoy.podAnnotations`
+(operator flag `--envoy-pod-annotations`). By default no annotations are mirrored. Only exact keys are
+supported, not prefixes, and `ipam.vitistack.io/` keys are reserved. All routes on a gateway must use the same
+value for a key, and changing a value restarts the gateway's Envoy pods.
+
+The operator refuses to start if more than 8 keys are configured. Gateway API allows at most 16 entries in
+`spec.infrastructure.annotations`, and the operator uses up to 4 of them for IPAM (`zone`, `ip-family`,
+`addresses`, `retention-period-days`). That leaves a technical ceiling of 12; the limit of 8 keeps a margin
+below it so new IPAM settings can be added without Gateway updates being rejected.
+
+Values longer than 4096 characters (the Gateway API limit) are rejected by the webhook and skipped by the
+controller with a `Warning` event. The operator records the keys it wrote in the Gateway annotation
+`gatewayapi-operator.vitistack.io/envoy-pod-annotations`, so keys removed from `envoy.podAnnotations` (or the
+whole feature being disabled) are cleaned up from existing Gateways and Envoy pods.
+
+When a route stops being managed by the operator (`gatewayapi-operator.vitistack.io/enabled` removed or set to
+`"false"`), its values are not removed immediately. They are cleaned up the next time the Gateway is synchronized,
+when another route on the same Gateway changes or at the operator's periodic resync. If it was the only route on
+the Gateway, the Gateway is left unchanged, the same as its listeners.
+
+```yaml
+envoy:
+  podAnnotations:
+    - nhn.no/splunkIndex
+    - nhn.no/splunkSourcetype
+```
+
 
 
 

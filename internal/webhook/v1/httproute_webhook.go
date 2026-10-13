@@ -21,6 +21,7 @@ import (
 
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/annotations"
 	"github.com/NorskHelsenett/gatewayapi-operator/internal/webhook/v1/validations"
+	"k8s.io/apimachinery/pkg/api/equality"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,9 +33,9 @@ import (
 var httproutelog = logf.Log.WithName("httproute-resource")
 
 // SetupHTTPRouteWebhookWithManager registers the webhook for HTTPRoute in the manager.
-func SetupHTTPRouteWebhookWithManager(mgr ctrl.Manager) error {
+func SetupHTTPRouteWebhookWithManager(mgr ctrl.Manager, envoyPodAnnotations []string) error {
 	return ctrl.NewWebhookManagedBy(mgr, &gatewayv1.HTTPRoute{}).
-		WithValidator(&HTTPRouteCustomValidator{Client: mgr.GetClient()}).
+		WithValidator(&HTTPRouteCustomValidator{Client: mgr.GetClient(), EnvoyPodAnnotations: envoyPodAnnotations}).
 		WithValidatorCustomPath("/gatewayapi-operator-httproute-validator").
 		Complete()
 }
@@ -48,6 +49,7 @@ func SetupHTTPRouteWebhookWithManager(mgr ctrl.Manager) error {
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type HTTPRouteCustomValidator struct {
 	client.Client
+	EnvoyPodAnnotations []string
 }
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type HTTPRoute.
@@ -102,12 +104,24 @@ func (v *HTTPRouteCustomValidator) ValidateCreate(ctx context.Context, httproute
 		return nil, err
 	}
 
+	if len(v.EnvoyPodAnnotations) > 0 {
+		otherRoutes, err := v.ListOtherRoutesOnGateway(ctx, httproute)
+		if err != nil {
+			return nil, err
+		}
+		err = validations.ValidateEnvoyPodAnnotations(v.EnvoyPodAnnotations, httproute, otherRoutes)
+		if err != nil {
+			httproutelog.Info("Rejecting HTTPRoute creation", "name", httproute.GetName(), "reason", err.Error())
+			return nil, err
+		}
+	}
+
 	return nil, nil
 
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type HTTPRoute.
-func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, _, httproute *gatewayv1.HTTPRoute) (admission.Warnings, error) {
+func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, oldRoute, httproute *gatewayv1.HTTPRoute) (admission.Warnings, error) {
 
 	// We don't want to act on HTTPRoutes not managed by this operator.
 	if httproute.ObjectMeta.Annotations[annotations.AnnotationUseHttprouteOperator] != "true" {
@@ -157,7 +171,34 @@ func (v *HTTPRouteCustomValidator) ValidateUpdate(ctx context.Context, _, httpro
 		return nil, err
 	}
 
+	if len(v.EnvoyPodAnnotations) > 0 && envoyPodAnnotationsAffected(v.EnvoyPodAnnotations, oldRoute, httproute) {
+		otherRoutes, err := v.ListOtherRoutesOnGateway(ctx, httproute)
+		if err != nil {
+			return nil, err
+		}
+		err = validations.ValidateEnvoyPodAnnotations(v.EnvoyPodAnnotations, httproute, otherRoutes)
+		if err != nil {
+			httproutelog.Info("Rejecting HTTPRoute update", "name", httproute.GetName(), "reason", err.Error())
+			return nil, err
+		}
+	}
+
 	return nil, nil
+}
+
+// envoyPodAnnotationsAffected limits the check to real changes, so the operator's own finalizer and annotation updates are never rejected.
+func envoyPodAnnotationsAffected(keys []string, oldRoute, newRoute *gatewayv1.HTTPRoute) bool {
+	if oldRoute.Annotations[annotations.AnnotationUseHttprouteOperator] != newRoute.Annotations[annotations.AnnotationUseHttprouteOperator] {
+		return true
+	}
+	for _, key := range keys {
+		oldValue, oldOK := oldRoute.Annotations[key]
+		newValue, newOK := newRoute.Annotations[key]
+		if oldOK != newOK || oldValue != newValue {
+			return true
+		}
+	}
+	return !equality.Semantic.DeepEqual(oldRoute.Spec.ParentRefs, newRoute.Spec.ParentRefs)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type HTTPRoute.
